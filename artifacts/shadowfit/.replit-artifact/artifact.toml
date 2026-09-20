@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ShadowFit"
+description = "A mobile-first calisthenics fitness PWA for tracking daily workouts, progress, nutrition, reminders, and goals."
+version = "1.0.0"
+id = "artifacts/shadowfit"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20846
+
+[services.development]
+run = "pnpm --filter @workspace/shadowfit run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/shadowfit", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/shadowfit/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20846"
+BASE_PATH = "/"

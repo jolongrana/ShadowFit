@@ -1,0 +1,107 @@
+export type Goal = 'strength' | 'muscle' | 'endurance' | 'skill' | 'general';
+export type View = 'today' | 'workout' | 'progress' | 'nutrition' | 'settings';
+
+export type Exercise = {
+  id: string;
+  name: string;
+  cue: string;
+  sets: number;
+  reps: string;
+  rest: number;
+  tag: string;
+};
+
+export type Workout = {
+  id: string;
+  name: string;
+  level: string;
+  duration: string;
+  focus: string;
+  description: string;
+  exercises: Exercise[];
+};
+
+export const goals: Array<{ id: Goal; label: string; detail: string; mark: string }> = [
+  { id: 'strength', label: 'Build strength', detail: 'Own the basics. Add control and capacity.', mark: '01' },
+  { id: 'muscle', label: 'Build muscle', detail: 'Use steady volume and control to grow.', mark: '02' },
+  { id: 'endurance', label: 'Improve endurance', detail: 'Stay composed for longer efforts.', mark: '03' },
+  { id: 'skill', label: 'Improve calisthenics skills', detail: 'Make the hard shapes feel inevitable.', mark: '04' },
+  { id: 'general', label: 'General fitness', detail: 'Build a balanced base that lasts.', mark: '05' },
+];
+
+export const workouts: Workout[] = [
+  {
+    id: 'beginner-full-body', name: 'Beginner Full Body', level: 'Foundation', duration: '18 min', focus: 'Control + capacity',
+    description: 'A measured first step. Clean reps, full range, no rushing.',
+    exercises: [
+      { id: 'incline-pushup', name: 'Incline push-ups', cue: 'Hands under shoulders · ribs tucked', sets: 3, reps: '8–10', rest: 60, tag: 'push' },
+      { id: 'bodyweight-squat', name: 'Bodyweight squats', cue: 'Knees track over toes · breathe low', sets: 3, reps: '12', rest: 60, tag: 'legs' },
+      { id: 'dead-bug', name: 'Dead bug', cue: 'Low back stays heavy on the floor', sets: 3, reps: '8 / side', rest: 45, tag: 'core' },
+      { id: 'reverse-lunge', name: 'Reverse lunges', cue: 'Soft touch · drive through the front foot', sets: 2, reps: '8 / side', rest: 60, tag: 'legs' },
+    ],
+  },
+  {
+    id: 'upper-body', name: 'Upper Body', level: 'Build', duration: '24 min', focus: 'Press + pull',
+    description: 'A dense upper-body session built around steady tension.',
+    exercises: [
+      { id: 'pushup', name: 'Push-ups', cue: 'Shoulders slightly ahead of wrists', sets: 4, reps: '6–12', rest: 90, tag: 'push' },
+      { id: 'table-row', name: 'Table rows', cue: 'Pull elbows toward your back pockets', sets: 4, reps: '6–10', rest: 90, tag: 'pull' },
+      { id: 'pike-pushup', name: 'Pike push-ups', cue: 'Head travels toward the floor', sets: 3, reps: '6–8', rest: 90, tag: 'shoulders' },
+      { id: 'scapular-pull', name: 'Scapular pulls', cue: 'Move from the shoulder blades only', sets: 3, reps: '10', rest: 60, tag: 'pull' },
+    ],
+  },
+  {
+    id: 'lower-body', name: 'Lower Body', level: 'Build', duration: '22 min', focus: 'Legs + balance',
+    description: 'Slow tempo and unilateral work for legs that stay switched on.',
+    exercises: [
+      { id: 'split-squat', name: 'Split squats', cue: 'Front heel heavy · torso tall', sets: 3, reps: '8 / side', rest: 90, tag: 'legs' },
+      { id: 'single-leg-bridge', name: 'Single-leg bridges', cue: 'Finish with glutes, not your back', sets: 3, reps: '10 / side', rest: 60, tag: 'glutes' },
+      { id: 'calf-raise', name: 'Single-leg calf raises', cue: 'Pause at the top', sets: 3, reps: '12 / side', rest: 45, tag: 'calves' },
+      { id: 'wall-sit', name: 'Wall sit', cue: 'Breathe behind the brace', sets: 2, reps: '30 sec', rest: 60, tag: 'legs' },
+    ],
+  },
+  {
+    id: 'core', name: 'Core', level: 'Focused', duration: '16 min', focus: 'Brace + breathe',
+    description: 'Short, direct work for a trunk you can trust.',
+    exercises: [
+      { id: 'hollow-hold', name: 'Hollow hold', cue: 'Ribs down · reach long', sets: 4, reps: '20 sec', rest: 45, tag: 'core' },
+      { id: 'side-plank', name: 'Side plank', cue: 'Push the floor away', sets: 3, reps: '20 sec / side', rest: 45, tag: 'core' },
+      { id: 'bear-crawl', name: 'Bear hover', cue: 'Knees low · quiet steps', sets: 3, reps: '30 sec', rest: 60, tag: 'core' },
+    ],
+  },
+  {
+    id: 'push', name: 'Push', level: 'Build', duration: '20 min', focus: 'Chest + shoulders',
+    description: 'Pressing volume with a clean line from palm to hip.',
+    exercises: [
+      { id: 'pushup-ladder', name: 'Push-up ladder', cue: 'Stop one rep before the grind', sets: 4, reps: '5–10', rest: 90, tag: 'chest' },
+      { id: 'diamond-pushup', name: 'Close-grip push-ups', cue: 'Elbows brush the ribs', sets: 3, reps: '5–8', rest: 90, tag: 'triceps' },
+      { id: 'pike-pushup-two', name: 'Pike push-ups', cue: 'Press the floor away', sets: 3, reps: '6–10', rest: 75, tag: 'shoulders' },
+    ],
+  },
+  {
+    id: 'pull', name: 'Pull', level: 'Build', duration: '22 min', focus: 'Back + grip',
+    description: 'A no-nonsense pulling session using whatever is around you.',
+    exercises: [
+      { id: 'table-row-two', name: 'Table rows', cue: 'Chest to the edge · no shrugging', sets: 4, reps: '6–10', rest: 90, tag: 'back' },
+      { id: 'towel-row', name: 'Towel isometric row', cue: 'Pull hard for 20 seconds', sets: 3, reps: '20 sec', rest: 60, tag: 'grip' },
+      { id: 'reverse-snow-angel', name: 'Reverse snow angels', cue: 'Long neck · squeeze between blades', sets: 3, reps: '10', rest: 45, tag: 'back' },
+    ],
+  },
+  {
+    id: 'full-calisthenics', name: 'Full Calisthenics', level: 'Complete', duration: '32 min', focus: 'Whole body',
+    description: 'The full ritual. Push, pull, legs, core — leave nothing noisy behind.',
+    exercises: [
+      { id: 'tempo-pushup', name: 'Tempo push-ups', cue: 'Three seconds down', sets: 4, reps: '8', rest: 90, tag: 'push' },
+      { id: 'split-squat-two', name: 'Split squats', cue: 'Own the bottom position', sets: 4, reps: '8 / side', rest: 90, tag: 'legs' },
+      { id: 'table-row-three', name: 'Table rows', cue: 'Pull the chest to the edge', sets: 4, reps: '8', rest: 90, tag: 'pull' },
+      { id: 'hollow-hold-two', name: 'Hollow hold', cue: 'Stay long under fatigue', sets: 3, reps: '25 sec', rest: 60, tag: 'core' },
+    ],
+  },
+];
+
+export const mealSets = [
+  { title: 'Breakfast', meals: ['Greek yogurt, oats + berries', 'Eggs on sourdough + greens', 'Overnight oats with peanut butter', 'Cottage cheese, banana + cinnamon'] },
+  { title: 'Lunch', meals: ['Chicken rice bowl with crunchy greens', 'Tuna, white bean + lemon salad', 'Tofu soba with sesame cabbage', 'Turkey wrap with hummus + peppers'] },
+  { title: 'Dinner', meals: ['Salmon, potatoes + charred broccoli', 'Turkey chili with avocado', 'Ginger beef noodles + bok choy', 'Lentil curry with basmati rice'] },
+  { title: 'Snack', meals: ['Apple + a handful of almonds', 'Protein shake + frozen banana', 'Rice cakes with cottage cheese', 'Edamame with sea salt'] },
+];

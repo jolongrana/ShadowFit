@@ -1,0 +1,1 @@
+- [ShadowFit product boundary](shadowfit-product.md) — keep the first-release fitness flow local-first; add sync without making workouts network-dependent.

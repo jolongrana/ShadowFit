@@ -1,6 +1,6 @@
-# [Project name]
+# ShadowFit
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+ShadowFit is a mobile-first calisthenics fitness PWA for guided workouts, progress tracking, nutrition ideas, reminders, and goals.
 
 ## Run & Operate
 
@@ -22,15 +22,27 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/shadowfit/src/App.tsx` — application shell, routes, local state, workout session logic, timer, settings, and screens
+- `artifacts/shadowfit/src/data/shadowfit.ts` — starter workouts, exercises, goals, and meal ideas
+- `artifacts/shadowfit/src/index.css` — ShadowFit blackout theme and responsive UI tokens
+- `artifacts/shadowfit/public/manifest.webmanifest` — installable PWA metadata
+- `artifacts/shadowfit/public/sw.js` — core offline shell caching
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first release is local-first: workout state, progress history, preferences, hydration, meal swaps, and reminder times are stored in the browser.
+- Workout and nutrition content are separated from UI so future sync or content updates can be added without rewriting screens.
+- Weather and notification APIs are progressive enhancements with explicit fallback states; neither is required to use the core app.
+- The web app is installable as a standalone PWA and caches its core shell for offline use where the browser supports service workers.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Onboarding captures a name and one of five non-extreme fitness goals.
+- Home shows the current workout, date-based streak, weekly target, hydration, weather fallback/location check, and indoor/outdoor recommendation.
+- Workout includes seven starter sessions, set-level checklist progress, start/pause/resume, previous/next, skip exercise, finish/finish-early, and a real countdown rest timer with presets/custom duration.
+- Progress aggregates logged sessions, time, sets, current streak, weekly activity, completion, personal records, and session history.
+- Nutrition provides goal context, practical meal ideas, meal swaps, and hydration tracking.
+- Settings manage goal, workout/hydration/meal reminder times, notification permission status, units, theme, rest default, reset, and about information.
 
 ## User preferences
 
