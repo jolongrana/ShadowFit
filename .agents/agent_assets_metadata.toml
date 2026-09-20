@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "VuN00xH6anwx_i2cAGbCs"
+uri = "file://artifacts/shadowfit/public/shadowfit-lockup.png"
+type = "image"
+title = "ShadowFit logo"
+description = "Your supplied ShadowFit artwork, prepared as the main app lockup."
+logical_id = "7d9e5e8f-ed2e-48a8-ac72-57a076aed8a6"
+content_hash = "sha256:f0b9e224fe33701ec7586444f596ddc935bdb77868104a4493c39c2385a0bad8"
+size = 758108
+mtime_ms = 1789879978916
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:1d885b38-f6df-4bff-b4fa-1022133a0150/7d9e5e8f-ed2e-48a8-ac72-57a076aed8a6/7c206316-ba05-45ab-ba50-40f341b08554"
+storage_version_token = "1789880042702782"
+content_type = "image/png"
+
+[[outputs]]
+id = "fGYSvcfJg_ky9Gh6WEAP-"
+uri = "file://artifacts/shadowfit/public/shadowfit-symbol.png"
+type = "image"
+title = "ShadowFit emblem"
+description = "The compact emblem derived from your supplied ShadowFit artwork for app icons and navigation."
+logical_id = "cfe06a5b-1d46-43cf-ade1-01b47d5dcd47"
+content_hash = "sha256:392acde1e065e9d331d17f21cf54d826a199500843173b6652a93353ce1b7f93"
+size = 221853
+mtime_ms = 1789879978919
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:1d885b38-f6df-4bff-b4fa-1022133a0150/cfe06a5b-1d46-43cf-ade1-01b47d5dcd47/31b860dd-3fb6-4eaf-859c-e88d334c4f00"
+storage_version_token = "1789880043311043"
+content_type = "image/png"

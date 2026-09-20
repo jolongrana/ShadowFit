@@ -9,7 +9,7 @@ import {
   CircleHelp, Clock3, Cloud, CloudSun, Dumbbell, Flame, Gauge, Globe2, HeartPulse, House,
   Info, Leaf, Menu, Moon, MoreHorizontal, Pause, Play, Plus, RefreshCw, RotateCcw, Settings2,
   ShieldCheck, SkipBack, SkipForward, SlidersHorizontal, Sparkles, Sun, Target, TimerReset,
-  Trophy, UserRound, Volume2, Waves, X, Zap,
+  Trophy, UserRound, Volume2, Waves, X,
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
 import { goals, mealSets, workouts, type Exercise, type Goal, type View, type Workout } from './data/shadowfit';
@@ -101,10 +101,17 @@ function AppProvider({ children }: { children: ReactNode }) {
   return <AppContext.Provider value={{ state, update, reset }}>{children}</AppContext.Provider>;
 }
 
-function Logo({ compact = false }: { compact?: boolean }) {
+function Logo({ compact = false, showcase = false }: { compact?: boolean; showcase?: boolean }) {
+  if (showcase) {
+    return <div className="flex items-center" data-testid="brand-shadowfit">
+      <img src="/shadowfit-lockup.png" alt="ShadowFit" className="h-28 w-28 object-contain sm:h-36 sm:w-36" />
+    </div>;
+  }
   return <div className="flex items-center gap-2.5" data-testid="brand-shadowfit">
-    <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground"><Zap size={17} strokeWidth={3} /></span>
-    {!compact && <span className="font-display text-[15px] font-bold tracking-[.18em]">SHADOW<span className="text-primary">FIT</span></span>}
+    <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-black ring-1 ring-white/10">
+      <img src="/shadowfit-symbol.png" alt="" className="h-full w-full object-contain" />
+    </span>
+    {!compact && <img src="/shadowfit-wordmark.png" alt="ShadowFit" className="h-8 w-[118px] object-contain object-left" />}
   </div>;
 }
 
@@ -183,7 +190,7 @@ function Onboarding() {
   const complete = () => update({ name: name.trim() || 'Athlete', goal, onboarded: true });
   return <div className="app-shell noise min-h-[100dvh] px-5 py-8 sm:px-10">
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-[1040px] flex-col">
-      <Logo />
+      <Logo showcase />
       <div className="my-auto grid gap-12 py-16 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
         <div className="page-enter">
           <Pill color="volt">Set your baseline</Pill>

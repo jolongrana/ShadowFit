@@ -1,5 +1,13 @@
-const CACHE_NAME = 'shadowfit-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.svg', '/icon-512.svg'];
+const CACHE_NAME = 'shadowfit-shell-v2';
+const APP_SHELL = [
+  '/',
+  '/manifest.webmanifest',
+  '/shadowfit-icon-192.png',
+  '/shadowfit-icon-512.png',
+  '/shadowfit-lockup.png',
+  '/shadowfit-symbol.png',
+  '/shadowfit-wordmark.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
