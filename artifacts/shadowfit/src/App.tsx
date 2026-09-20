@@ -115,6 +115,19 @@ function Logo({ compact = false, showcase = false }: { compact?: boolean; showca
   </div>;
 }
 
+function LoadingScreen() {
+  return <div className="loading-screen noise flex min-h-[100dvh] items-center justify-center px-6" role="status" aria-live="polite">
+    <div className="flex w-full max-w-xs flex-col items-center text-center">
+      <div className="loading-logo volt-glow">
+        <img src="/shadowfit-lockup.png" alt="ShadowFit" className="h-44 w-44 object-contain sm:h-52 sm:w-52" />
+      </div>
+      <p className="mt-8 font-mono text-[10px] uppercase tracking-[.26em] text-primary">Prepare your next session</p>
+      <div className="loading-track mt-5 h-1 w-44 overflow-hidden rounded-full bg-secondary" aria-hidden="true"><span className="loading-sweep block h-full rounded-full bg-primary" /></div>
+      <p className="mt-3 text-xs text-muted-foreground">Loading your ritual…</p>
+    </div>
+  </div>;
+}
+
 const navItems: Array<{ href: string; label: string; icon: typeof House; view: View }> = [
   { href: '/', label: 'Today', icon: House, view: 'today' },
   { href: '/workout', label: 'Workout', icon: Dumbbell, view: 'workout' },
@@ -417,7 +430,12 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><AppProvider><RoutedErrorBoundary><AppRoutes /></RoutedErrorBoundary></AppProvider></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoading(false), 850);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <QueryClientProvider client={queryClient}><TooltipProvider>{loading ? <LoadingScreen /> : <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><AppProvider><RoutedErrorBoundary><AppRoutes /></RoutedErrorBoundary></AppProvider></WouterRouter>}<Toaster /></TooltipProvider></QueryClientProvider>;
 }
 
 export default App;
