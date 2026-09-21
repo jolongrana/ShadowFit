@@ -1,5 +1,6 @@
 export type Goal = 'strength' | 'muscle' | 'endurance' | 'skill' | 'general';
-export type View = 'today' | 'workout' | 'progress' | 'nutrition' | 'settings';
+export type View = 'today' | 'workout' | 'progress' | 'nutrition' | 'looks' | 'settings';
+export type FaceShape = 'oval' | 'round' | 'square' | 'heart' | 'oblong' | 'diamond';
 
 export type Exercise = {
   id: string;
@@ -28,6 +29,69 @@ export const goals: Array<{ id: Goal; label: string; detail: string; mark: strin
   { id: 'skill', label: 'Improve calisthenics skills', detail: 'Make the hard shapes feel inevitable.', mark: '04' },
   { id: 'general', label: 'General fitness', detail: 'Build a balanced base that lasts.', mark: '05' },
 ];
+
+export const faceShapes: Array<{ id: FaceShape; label: string; detail: string }> = [
+  { id: 'oval', label: 'Oval', detail: 'Balanced length and width' },
+  { id: 'round', label: 'Round', detail: 'Soft angles and fuller cheeks' },
+  { id: 'square', label: 'Square', detail: 'Defined jaw and similar width' },
+  { id: 'heart', label: 'Heart', detail: 'Wider forehead, narrower chin' },
+  { id: 'oblong', label: 'Oblong', detail: 'Longer than it is wide' },
+  { id: 'diamond', label: 'Diamond', detail: 'Prominent cheekbones' },
+];
+
+export const lookRecommendations: Record<FaceShape, {
+  haircuts: string[];
+  routine: Array<{ name: string; detail: string }>;
+}> = {
+  oval: {
+    haircuts: ['Textured crop', 'Classic taper', 'Medium length with natural volume'],
+    routine: [
+      { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
+      { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
+      { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
+    ],
+  },
+  round: {
+    haircuts: ['High taper with texture', 'Side-swept top', 'Short sides with height'],
+    routine: [
+      { name: 'Posture reset', detail: 'Stack ears over shoulders and take 5 slow breaths.' },
+      { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
+      { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
+    ],
+  },
+  square: {
+    haircuts: ['Crew cut with taper', 'Messy medium crop', 'Classic side part'],
+    routine: [
+      { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
+      { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
+      { name: 'Shoulder drop', detail: 'Lift the shoulders, exhale, and let them fall. Repeat 8 times.' },
+    ],
+  },
+  heart: {
+    haircuts: ['Layered fringe', 'Side-parted medium cut', 'Low taper with soft texture'],
+    routine: [
+      { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
+      { name: 'Shoulder drop', detail: 'Lift the shoulders, exhale, and let them fall. Repeat 8 times.' },
+      { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
+    ],
+  },
+  oblong: {
+    haircuts: ['Textured fringe', 'Medium layered cut', 'Classic side-swept style'],
+    routine: [
+      { name: 'Posture reset', detail: 'Stack ears over shoulders and take 5 slow breaths.' },
+      { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
+      { name: 'Shoulder drop', detail: 'Lift the shoulders, exhale, and let them fall. Repeat 8 times.' },
+    ],
+  },
+  diamond: {
+    haircuts: ['Side-swept texture', 'Layered crop', 'Soft quiff with tapered sides'],
+    routine: [
+      { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
+      { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
+      { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
+    ],
+  },
+};
 
 export const workouts: Workout[] = [
   {

@@ -1,1 +1,2 @@
 - [ShadowFit product boundary](shadowfit-product.md) — keep the first-release fitness flow local-first; add sync without making workouts network-dependent.
+- [ShadowFit looks privacy](shadowfit-looks-privacy.md) — keep uploaded appearance photos local and make face-shape guidance user-confirmed unless a trusted analyzer is added.

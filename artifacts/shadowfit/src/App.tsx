@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ChangeEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -12,7 +12,7 @@ import {
   Trophy, UserRound, Volume2, Waves, X,
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
-import { goals, mealSets, workouts, type Exercise, type Goal, type View, type Workout } from './data/shadowfit';
+import { faceShapes, goals, lookRecommendations, mealSets, workouts, type Exercise, type FaceShape, type Goal, type View, type Workout } from './data/shadowfit';
 
 const queryClient = new QueryClient();
 const STORE_KEY = 'shadowfit-local-v1';
@@ -47,6 +47,8 @@ type AppState = {
   weatherTemp: string;
   weatherCondition: string;
   weatherRecommendation: string;
+  lookPhoto: string;
+  faceShape: FaceShape | null;
 };
 
 const defaultState: AppState = {
@@ -54,6 +56,7 @@ const defaultState: AppState = {
   active: null, history: [], timerDefault: 60, customRest: 75, reminder: '18:30', hydrationReminder: '10:00', mealReminder: '12:30', units: 'metric',
   theme: 'dark', notifications: 'Not requested', hydration: 3, mealOffsets: [0, 0, 0, 0],
   weatherLabel: 'Indoor is always on', weatherTemp: '—', weatherCondition: 'Manual fallback', weatherRecommendation: 'Indoor workout recommended.',
+  lookPhoto: '', faceShape: null,
 };
 
 function readState(): AppState {
@@ -151,6 +154,7 @@ const navItems: Array<{ href: string; label: string; icon: typeof House; view: V
   { href: '/workout', label: 'Workout', icon: Dumbbell, view: 'workout' },
   { href: '/progress', label: 'Progress', icon: Activity, view: 'progress' },
   { href: '/nutrition', label: 'Fuel', icon: Leaf, view: 'nutrition' },
+  { href: '/looks', label: 'Looks', icon: Sparkles, view: 'looks' },
   { href: '/settings', label: 'Settings', icon: SlidersHorizontal, view: 'settings' },
 ];
 
@@ -231,6 +235,16 @@ function ShadowScoreCard({ score, compact = false }: { score: ShadowScore; compa
     <ProgressBar value={score.total / 10} className="mt-6" />
     <div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-secondary/50 p-4"><div className="flex items-center justify-between"><span className="text-xs font-semibold">Completed sets</span><span className="font-mono text-xs text-primary">+{score.setPoints}</span></div><p className="mt-2 text-xs text-muted-foreground">{score.sets} sets · 10 points each · capped at 700</p></div><div className="rounded-xl bg-secondary/50 p-4"><div className="flex items-center justify-between"><span className="text-xs font-semibold">Daily streak</span><span className="font-mono text-xs text-primary">+{score.streakPoints}</span></div><p className="mt-2 text-xs text-muted-foreground">{score.streak} consecutive days · 30 points each · capped at 300</p></div></div>
   </section>;
+}
+
+function videoSearchUrl(query: string) {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${query} tutorial`)}`;
+}
+
+function VideoGuide({ query, label = 'Video guide', testId }: { query: string; label?: string; testId: string }) {
+  return <a href={videoSearchUrl(query)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-2 text-[11px] font-semibold text-primary transition hover:bg-primary/20" data-testid={testId}>
+    <Play size={13} /> {label} <ArrowRight size={12} />
+  </a>;
 }
 
 function Onboarding() {
@@ -392,7 +406,12 @@ function SessionPanel({ workout }: { workout: Workout }) {
 function WorkoutPage() {
   const { state, update } = useApp();
   const selected = workouts.find((item) => item.id === state.favoriteWorkout) ?? workouts[0];
-  return <div className="page-enter"><Topbar eyebrow="The work" title="Workout" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-workout-home"><House size={14} /> Today</Link>} /><section><div className="mb-3 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">Choose your session</p><p className="mt-1 text-sm text-muted-foreground">No equipment. No filler.</p></div><span className="font-mono text-[10px] text-muted-foreground">{workouts.length} ready</span></div><div className="scrollbar-hide -mx-1 flex gap-3 overflow-x-auto px-1 pb-4">{workouts.map((workout) => <WorkoutCard key={workout.id} workout={workout} selected={workout.id === selected.id} onSelect={() => update({ favoriteWorkout: workout.id, active: state.active?.workoutId === workout.id ? state.active : null })} />)}</div></section><SessionPanel workout={selected} /></div>;
+  return <div className="page-enter">
+    <Topbar eyebrow="The work" title="Workout" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-workout-home"><House size={14} /> Today</Link>} />
+    <section><div className="mb-3 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-muted-foreground">Choose your session</p><p className="mt-1 text-sm text-muted-foreground">No equipment. No filler.</p></div><span className="font-mono text-[10px] text-muted-foreground">{workouts.length} ready</span></div><div className="scrollbar-hide -mx-1 flex gap-3 overflow-x-auto px-1 pb-4">{workouts.map((workout) => <WorkoutCard key={workout.id} workout={workout} selected={workout.id === selected.id} onSelect={() => update({ favoriteWorkout: workout.id, active: state.active?.workoutId === workout.id ? state.active : null })} />)}</div></section>
+    <SessionPanel workout={selected} />
+    <section className="card mt-4 p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Move library</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">See the form.</h2></div><Pill color="volt">Video guides</Pill></div><div className="mt-5 grid gap-2 sm:grid-cols-2">{selected.exercises.map((exercise, index) => <div key={exercise.id} className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><span className="flex-1"><span className="block text-sm font-semibold">{exercise.name}</span><span className="mt-1 block text-xs text-muted-foreground">{exercise.sets} sets · {exercise.reps}</span></span><VideoGuide query={`${exercise.name} exercise form`} label="Watch" testId={`link-video-exercise-${exercise.id}`} /></div>)}</div></section>
+  </div>;
 }
 
 function Progress() {
@@ -407,6 +426,57 @@ function Progress() {
   return <div className="page-enter"><Topbar eyebrow="Proof of work" title="Progress" action={<button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-border text-muted-foreground" data-testid="button-progress-filter"><CalendarDays size={16} /></button>} /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Sessions" value={String(state.history.length)} icon={<Dumbbell size={17} />} /><Metric label="Minutes" value={String(totalMinutes)} icon={<Clock3 size={17} />} /><Metric label="Sets moved" value={String(totalSets)} icon={<Gauge size={17} />} /><Metric label="Current streak" value={`${streak}d`} icon={<Flame size={17} />} /></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><section className="card p-5 sm:p-7"><div className="flex items-start justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Weekly activity</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Keep the line moving.</h2></div><Pill color="volt">{state.history.length ? 'In motion' : 'Start today'}</Pill></div><div className="mt-8 flex h-44 items-end gap-2 border-b border-border pb-2">{weekValues.map((value, index) => <div key={index} className="flex flex-1 flex-col items-center gap-2"><div className="flex h-full w-full items-end"><div className={`chart-bar w-full ${value ? '' : 'opacity-20'}`} style={{ height: `${Math.max(8, (value / max) * 100)}%` }} /></div><span className="font-mono text-[10px] text-muted-foreground">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]}</span></div>)}</div></section><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Completion</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">A little better.</h2></div><Target size={21} className="text-primary" /></div><div className="mt-8 flex items-center gap-5"><div className="relative grid h-28 w-28 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(hsl(var(--primary)) ${Math.min(100, state.history.length * 17)}%, hsl(var(--secondary)) 0)` }}><div className="grid h-20 w-20 place-items-center rounded-full bg-card"><span className="font-display text-2xl font-bold">{Math.min(100, state.history.length * 17)}%</span></div></div><p className="text-sm leading-6 text-muted-foreground">Your weekly target is six sessions. <span className="font-semibold text-foreground">{Math.max(0, 6 - state.history.length)} to go</span> this week.</p></div></section></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Personal records</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Your quiet wins.</h2></div><Trophy size={21} className="text-accent" /></div>{prs.length ? <div className="mt-6 space-y-3">{prs.map(([name, sets], index) => <div key={name} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><span className="flex-1 text-sm font-semibold">{name}</span><span className="font-mono text-xs text-muted-foreground">{sets} sets</span></div>)}</div> : <EmptyState icon={<Trophy size={19} />} title="Your first PR is waiting." copy="Finish a session to start building your record." />}</section><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Exercise history</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Recent sessions.</h2></div><Activity size={21} className="text-primary" /></div>{state.history.length ? <div className="mt-6 space-y-3">{state.history.slice(0, 4).map((item) => <div key={item.id} className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary"><Check size={16} /></div><div className="flex-1"><p className="text-sm font-semibold">{item.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {item.minutes} min</p></div><span className="font-mono text-xs text-muted-foreground">{item.sets} sets</span></div>)}</div> : <EmptyState icon={<Activity size={19} />} title="Nothing logged yet." copy="Your history will show up after your first finished workout." />}</section></div></div>;
 }
 
+function Looks() {
+  const { state, update } = useApp();
+  const recommendation = state.faceShape ? lookRecommendations[state.faceShape] : null;
+  const shapeLabel = faceShapes.find((shape) => shape.id === state.faceShape)?.label;
+
+  const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const maxSize = 720;
+        const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        update({ lookPhoto: canvas.toDataURL('image/jpeg', 0.82) });
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  return <div className="page-enter">
+    <Topbar eyebrow="Personal presentation" title="Looks" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-looks-home"><House size={14} /> Today</Link>} />
+    <div className="grid gap-4 lg:grid-cols-[.82fr_1.18fr]">
+      <section className="card p-5 sm:p-7">
+        <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Your reference</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Find your frame.</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Upload a photo to keep beside your haircut and posture notes. It stays on this device.</p></div><Sparkles className="text-primary" size={22} /></div>
+        <div className="mt-6 overflow-hidden rounded-2xl border border-dashed border-border bg-secondary/40">
+          {state.lookPhoto ? <div className="relative"><img src={state.lookPhoto} alt="Your uploaded reference" className="max-h-[360px] w-full object-cover" /><button type="button" onClick={() => update({ lookPhoto: '', faceShape: null })} className="absolute right-3 top-3 rounded-lg bg-background/85 px-3 py-2 text-xs font-semibold text-foreground backdrop-blur" data-testid="button-remove-look-photo">Remove</button></div> : <label className="flex min-h-60 cursor-pointer flex-col items-center justify-center p-6 text-center"><span className="grid h-12 w-12 place-items-center rounded-xl bg-primary/15 text-primary"><Plus size={22} /></span><span className="mt-4 text-sm font-bold">Upload a clear face photo</span><span className="mt-2 text-xs leading-5 text-muted-foreground">Front-facing works best. JPG, PNG, or WebP.</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleUpload} className="sr-only" data-testid="input-look-photo" /></label>}
+        </div>
+        <div className="mt-5 rounded-xl border border-primary/20 bg-primary/[.06] p-4"><div className="flex gap-3"><ShieldCheck size={17} className="mt-0.5 shrink-0 text-primary" /><p className="text-xs leading-5 text-muted-foreground">This photo is resized and saved locally in ShadowFit. It is not uploaded to a server or used for identity recognition.</p></div></div>
+      </section>
+      <section className="card p-5 sm:p-7">
+        <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Style guide</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Choose your face shape.</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Use the closest match. This is a guide, not an automated verdict.</p></div>
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">{faceShapes.map((shape) => <button type="button" key={shape.id} disabled={!state.lookPhoto} onClick={() => update({ faceShape: shape.id })} className={`rounded-xl border p-3 text-left transition ${state.faceShape === shape.id ? 'selection-ring border-primary bg-primary/[.08]' : 'border-border bg-secondary/30 hover:bg-secondary/60'} disabled:cursor-not-allowed disabled:opacity-45`} data-testid={`button-face-shape-${shape.id}`}><span className="font-mono text-[10px] text-primary">{shape.label}</span><span className="mt-2 block text-xs leading-4 text-muted-foreground">{shape.detail}</span></button>)}</div>
+        {!state.lookPhoto && <p className="mt-4 text-xs text-muted-foreground">Upload a reference photo first, then choose the shape that looks closest to you.</p>}
+        {recommendation && <div className="mt-6 space-y-4">
+          <section className="rounded-2xl bg-secondary/50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Haircut directions</p><h3 className="font-display mt-1 text-lg font-bold">{shapeLabel} shape</h3></div><VideoGuide query={`${shapeLabel} face shape haircut`} label="Watch ideas" testId="link-video-haircut" /></div><div className="mt-4 flex flex-wrap gap-2">{recommendation.haircuts.map((cut) => <span key={cut} className="rounded-full border border-border px-3 py-2 text-xs font-semibold">{cut}</span>)}</div></section>
+          <section className="rounded-2xl bg-secondary/50 p-4"><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Face & neck routine</p><h3 className="font-display mt-1 text-lg font-bold">Relaxed, aligned, repeatable.</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">These movements support posture and jaw relaxation. They do not change bone structure or replace professional care.</p></div><div className="mt-4 space-y-2">{recommendation.routine.map((item, index) => <div key={item.name} className="flex items-start gap-3 rounded-xl border border-border bg-card/60 p-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><div className="flex-1"><p className="text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.detail}</p></div><VideoGuide query={`${item.name} neck posture exercise`} label="Video" testId={`link-video-face-routine-${index}`} /></div>)}</div></section>
+        </div>}
+      </section>
+    </div>
+  </div>;
+}
+
 function Metric({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return <div className="card p-4 sm:p-5"><div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">{label}</span><span className="text-primary">{icon}</span></div><p className="font-display mt-5 text-3xl font-bold tracking-[-.06em]" data-testid={`metric-${label.toLowerCase().replace(' ', '-')}`}>{value}</p></div>;
 }
@@ -418,7 +488,7 @@ function Nutrition() {
 }
 
 function MealCard({ meal, idea, index, onSwap }: { meal: string; idea: string; index: number; onSwap: () => void }) {
-  return <article className="card p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-mono text-[10px] text-primary">0{index + 1}</span><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">{meal}</p></div><button type="button" onClick={onSwap} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-primary" data-testid={`button-swap-meal-${index}`} aria-label={`Swap ${meal}`}><RefreshCw size={15} /></button></div><p className="font-display mt-7 min-h-[52px] text-xl font-bold leading-tight tracking-[-.03em]">{idea}</p><div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground"><CheckCircle2 size={14} className="text-primary" /> Simple, high-signal fuel</div></article>;
+  return <article className="card p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-mono text-[10px] text-primary">0{index + 1}</span><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">{meal}</p></div><button type="button" onClick={onSwap} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-primary" data-testid={`button-swap-meal-${index}`} aria-label={`Swap ${meal}`}><RefreshCw size={15} /></button></div><p className="font-display mt-7 min-h-[52px] text-xl font-bold leading-tight tracking-[-.03em]">{idea}</p><div className="mt-6 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-xs text-muted-foreground"><CheckCircle2 size={14} className="text-primary" /> Simple, high-signal fuel</div><VideoGuide query={`${idea} recipe preparation`} label="Watch" testId={`link-video-meal-${index}`} /></div></article>;
 }
 
 function Settings() {
@@ -459,6 +529,7 @@ function AppRoutes() {
     <Route path="/workout"><Shell><WorkoutPage /></Shell></Route>
     <Route path="/progress"><Shell><Progress /></Shell></Route>
     <Route path="/nutrition"><Shell><Nutrition /></Shell></Route>
+    <Route path="/looks"><Shell><Looks /></Shell></Route>
     <Route path="/settings"><Shell><Settings /></Shell></Route>
     <Route component={NotFound} />
   </Switch>;
