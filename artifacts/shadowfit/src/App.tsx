@@ -84,6 +84,24 @@ function currentStreak(history: HistoryEntry[]) {
   return streak;
 }
 
+type ShadowScore = {
+  total: number;
+  sets: number;
+  streak: number;
+  setPoints: number;
+  streakPoints: number;
+};
+
+function shadowScore(state: Pick<AppState, 'history' | 'active'>): ShadowScore {
+  const loggedSets = state.history.reduce((sum, item) => sum + item.sets, 0);
+  const activeSets = state.active ? Object.values(state.active.completed).reduce((sum, values) => sum + values.length, 0) : 0;
+  const sets = loggedSets + activeSets;
+  const streak = currentStreak(state.history);
+  const setPoints = Math.min(700, sets * 10);
+  const streakPoints = Math.min(300, streak * 30);
+  return { total: setPoints + streakPoints, sets, streak, setPoints, streakPoints };
+}
+
 type AppContextValue = { state: AppState; update: (patch: Partial<AppState>) => void; reset: () => void };
 const AppContext = createContext<AppContextValue | null>(null);
 function useApp() {
@@ -172,19 +190,23 @@ function Shell({ children }: { children: ReactNode }) {
 
 function Topbar({ eyebrow, title, action }: { eyebrow: string; title: string; action?: ReactNode }) {
   const { state } = useApp();
-  return <header className="mb-7 flex items-start justify-between gap-3">
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-[.2em] text-primary">{eyebrow}</p>
-      <h1 className="font-display mt-2 text-[30px] font-bold leading-none tracking-[-.045em] sm:text-[38px]" data-testid="text-page-title">{title}</h1>
-    </div>
-    <div className="flex items-center gap-2">
-      {action}
-      <div className="hidden h-9 items-center gap-2 rounded-full border border-border bg-card px-3 sm:flex">
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-secondary"><UserRound size={12} /></span>
-        <span className="text-xs font-semibold">{state.name}</span>
+  const score = title === 'Progress' ? shadowScore(state) : null;
+  return <>
+    <header className="mb-7 flex items-start justify-between gap-3">
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-[.2em] text-primary">{eyebrow}</p>
+        <h1 className="font-display mt-2 text-[30px] font-bold leading-none tracking-[-.045em] sm:text-[38px]" data-testid="text-page-title">{title}</h1>
       </div>
-    </div>
-  </header>;
+      <div className="flex items-center gap-2">
+        {action}
+        <div className="hidden h-9 items-center gap-2 rounded-full border border-border bg-card px-3 sm:flex">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-secondary"><UserRound size={12} /></span>
+          <span className="text-xs font-semibold">{state.name}</span>
+        </div>
+      </div>
+    </header>
+    {score && <div className="mb-7"><ShadowScoreCard score={score} /></div>}
+  </>;
 }
 
 function Pill({ children, color = 'muted' }: { children: ReactNode; color?: 'muted' | 'volt' | 'orange' }) {
@@ -193,6 +215,22 @@ function Pill({ children, color = 'muted' }: { children: ReactNode; color?: 'mut
 
 function ProgressBar({ value, className = '' }: { value: number; className?: string }) {
   return <div className={`progress-track h-2 ${className}`}><div className="progress-fill h-full" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>;
+}
+
+function ShadowScoreCard({ score, compact = false }: { score: ShadowScore; compact?: boolean }) {
+  if (compact) {
+    return <section className="card p-5" data-testid="card-shadow-score">
+      <div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Shadow score</p><Gauge size={17} className="text-primary" /></div>
+      <div className="mt-3 flex items-end justify-between gap-3"><p className="font-display text-4xl font-bold tracking-[-.06em]" data-testid="text-shadow-score">{score.total}<span className="ml-1 text-base font-semibold tracking-normal text-muted-foreground">/1000</span></p><Pill color="volt">{score.total ? 'Building' : 'Start today'}</Pill></div>
+      <ProgressBar value={score.total / 10} className="mt-4" />
+      <p className="mt-3 text-xs text-muted-foreground">{score.sets} sets · {score.streak} day streak</p>
+    </section>;
+  }
+  return <section className="card overflow-hidden p-5 sm:p-7" data-testid="card-shadow-score">
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Shadow score</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Earned in the quiet.</h2><p className="mt-2 max-w-xl text-sm text-muted-foreground">A simple measure of the work you keep showing up for. It grows from completed sets and consecutive training days.</p></div><div className="text-right"><p className="font-display text-5xl font-bold tracking-[-.07em] text-primary" data-testid="text-shadow-score">{score.total}</p><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">of 1000</p></div></div>
+    <ProgressBar value={score.total / 10} className="mt-6" />
+    <div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-secondary/50 p-4"><div className="flex items-center justify-between"><span className="text-xs font-semibold">Completed sets</span><span className="font-mono text-xs text-primary">+{score.setPoints}</span></div><p className="mt-2 text-xs text-muted-foreground">{score.sets} sets · 10 points each · capped at 700</p></div><div className="rounded-xl bg-secondary/50 p-4"><div className="flex items-center justify-between"><span className="text-xs font-semibold">Daily streak</span><span className="font-mono text-xs text-primary">+{score.streakPoints}</span></div><p className="mt-2 text-xs text-muted-foreground">{score.streak} consecutive days · 30 points each · capped at 300</p></div></div>
+  </section>;
 }
 
 function Onboarding() {
@@ -267,6 +305,7 @@ function Today() {
   const { state: weather, loading, manual, setManual, request, saveManual } = useWeather();
   const workout = workouts.find((item) => item.id === state.favoriteWorkout) ?? workouts[0];
   const streak = currentStreak(state.history);
+  const score = shadowScore(state);
   const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const todayLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'short', day: 'numeric' }).format(new Date());
   return <div className="page-enter">
@@ -284,7 +323,8 @@ function Today() {
       </section>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <section className="card p-5"><div className="flex items-start justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Current streak</p><p className="font-display mt-3 text-4xl font-bold tracking-[-.06em]" data-testid="text-streak">{streak}<span className="ml-2 text-base font-semibold tracking-normal text-muted-foreground">days</span></p></div><div className="grid h-10 w-10 place-items-center rounded-xl bg-accent/15 text-accent"><Flame size={20} /></div></div><div className="mt-5 flex gap-1.5">{days.map((day, index) => <div key={`${day}-${index}`} className="flex flex-1 flex-col items-center gap-1.5"><span className={`h-1.5 w-full rounded-full ${index < Math.min(7, streak) ? 'bg-primary' : 'bg-secondary'}`} /><span className="font-mono text-[9px] text-muted-foreground">{day}</span></div>)}</div></section>
-        <section className="card p-5"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Weekly target</p><Target size={17} className="text-primary" /></div><div className="mt-3 flex items-end justify-between"><p className="font-display text-4xl font-bold tracking-[-.06em]">{Math.min(100, state.history.length * 17)}<span className="text-xl">%</span></p><span className="mb-1 text-xs text-muted-foreground">{state.history.length} / 6 sessions</span></div><ProgressBar value={state.history.length * 17} className="mt-4" /></section>
+         <section className="card p-5"><div className="flex items-center justify-between"><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Weekly target</p><Target size={17} className="text-primary" /></div><div className="mt-3 flex items-end justify-between"><p className="font-display text-4xl font-bold tracking-[-.06em]">{Math.min(100, state.history.length * 17)}<span className="text-xl">%</span></p><span className="mb-1 text-xs text-muted-foreground">{state.history.length} / 6 sessions</span></div><ProgressBar value={state.history.length * 17} className="mt-4" /></section>
+         <ShadowScoreCard score={score} compact />
       </div>
     </div>
     <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
