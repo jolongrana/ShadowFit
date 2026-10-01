@@ -1,5 +1,8 @@
-import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ChangeEvent, type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, createContext, type ChangeEvent, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { ClerkProvider, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
+import { publishableKeyFromHost } from '@clerk/react/internal';
+import { shadcn } from '@clerk/themes';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -9,15 +12,88 @@ import {
   CircleHelp, Clock3, Cloud, CloudSun, Dumbbell, Flame, Gauge, Globe2, HeartPulse, House,
   Info, Leaf, Menu, Moon, MoreHorizontal, Pause, Play, Plus, RefreshCw, RotateCcw, Settings2,
   ShieldCheck, SkipBack, SkipForward, SlidersHorizontal, Sparkles, Sun, Target, TimerReset,
-  Trophy, UserRound, Volume2, Waves, X,
+  Frown, LogOut, Meh, Smile, Trophy, UserRound, Volume2, Waves, X,
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
+import CommunityHub from '@/components/community-hub';
+import {
+  getGetCommunityFriendsQueryKey,
+  getGetCommunityLeaderboardQueryKey,
+  getGetCommunityMeQueryKey,
+  useGetCommunityMe,
+  useSyncCommunityWorkouts,
+  type GetCommunityMeParams,
+} from '@workspace/api-client-react';
+import {
+  calculateShadowScore,
+  currentLocalDay,
+  rankForShadowScore,
+  streakForLocalDays,
+  type ShadowScore,
+} from '@workspace/api-zod/shadowfit-score';
 import { faceShapes, goals, lookRecommendations, mealSetsByGoal, workouts, type Exercise, type FaceShape, type Goal, type NutritionGoal, type OutfitAdvice, type OutfitStyle, type View, type Workout } from './data/shadowfit';
 
 const queryClient = new QueryClient();
 const STORE_KEY = 'shadowfit-local-v1';
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const clerkPubKey = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in environment.');
 
-type HistoryEntry = { id: string; workoutId: string; name: string; date: string; minutes: number; sets: number };
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: 'clerk',
+  options: {
+    logoPlacement: 'inside' as const,
+    logoLinkUrl: basePath || '/',
+    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+  },
+  variables: {
+    colorPrimary: 'hsl(76 100% 54%)',
+    colorForeground: 'hsl(48 24% 95%)',
+    colorMutedForeground: 'hsl(220 9% 62%)',
+    colorDanger: 'hsl(2 75% 60%)',
+    colorBackground: 'hsl(222 17% 12%)',
+    colorInput: 'hsl(221 15% 17%)',
+    colorInputForeground: 'hsl(48 24% 95%)',
+    colorNeutral: 'hsl(220 12% 20%)',
+    fontFamily: 'Manrope, ui-sans-serif, sans-serif',
+    borderRadius: '0.9rem',
+  },
+  elements: {
+    rootBox: 'w-full flex justify-center',
+    cardBox: 'bg-card rounded-2xl w-[440px] max-w-full overflow-hidden',
+    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    headerTitle: 'text-foreground',
+    headerSubtitle: 'text-muted-foreground',
+    socialButtonsBlockButtonText: 'text-foreground',
+    formFieldLabel: 'text-foreground',
+    footerActionLink: 'text-primary hover:brightness-110',
+    footerActionText: 'text-muted-foreground',
+    dividerText: 'text-muted-foreground',
+    identityPreviewEditButton: 'text-primary',
+    formFieldSuccessText: 'text-primary',
+    alertText: 'text-foreground',
+    logoBox: 'h-12',
+    logoImage: 'max-h-12 object-contain',
+    socialButtonsBlockButton: '!border-border !bg-secondary/60 hover:!bg-secondary',
+    formButtonPrimary: '!bg-primary !text-primary-foreground',
+    formFieldInput: '!bg-secondary/60 !text-foreground !border-border',
+    footerAction: 'text-muted-foreground',
+    dividerLine: 'bg-border',
+    alert: '!border-border !bg-secondary',
+    otpCodeFieldInput: '!bg-secondary/60 !text-foreground !border-border',
+    formFieldRow: 'text-foreground',
+    main: 'text-foreground',
+  },
+};
+
+type WorkoutFeeling = 'great' | 'good' | 'okay' | 'tough' | 'rough';
+type HistoryEntry = { id: string; workoutId: string; name: string; date: string; minutes: number; sets: number; localDay?: string; feeling?: WorkoutFeeling | null; scoreNoticeShown?: boolean };
 type ActiveSession = {
   workoutId: string;
   current: number;
@@ -88,16 +164,26 @@ function readState(): AppState {
   } catch { return defaultState; }
 }
 
-function currentStreak(history: HistoryEntry[]) {
-  const completedDays = new Set(history.map((item) => new Date(item.date).toDateString()));
-  const cursor = new Date();
-  if (!completedDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
-  let streak = 0;
-  while (completedDays.has(cursor.toDateString())) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
+function localTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+  catch { return 'UTC'; }
+}
+
+function isValidLocalDay(value: string | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function historyTimestamp(entry: HistoryEntry): Date | null {
+  if (typeof entry.date !== 'string') return null;
+  const completedAt = new Date(entry.date);
+  return Number.isNaN(completedAt.getTime()) ? null : completedAt;
+}
+
+function localDayForHistory(entry: HistoryEntry) {
+  if (isValidLocalDay(entry.localDay)) return entry.localDay;
+  return currentLocalDay(localTimeZone(), historyTimestamp(entry) ?? new Date(0));
 }
 
 function localDateKey(date: Date) {
@@ -166,25 +252,29 @@ function outfitIdeas(style: OutfitStyle, advice: OutfitAdvice, season: string, h
   };
 }
 
-type ShadowScore = {
-  total: number;
-  sets: number;
-  streak: number;
-  setPoints: number;
-  streakPoints: number;
-};
-
 function shadowScore(state: Pick<AppState, 'history' | 'active'>): ShadowScore {
-  const loggedSets = state.history.reduce((sum, item) => sum + item.sets, 0);
   const activeSets = state.active ? Object.values(state.active.completed).reduce((sum, values) => sum + values.length, 0) : 0;
-  const sets = loggedSets + activeSets;
-  const streak = currentStreak(state.history);
-  const setPoints = Math.min(700, sets * 10);
-  const streakPoints = Math.min(300, streak * 30);
-  return { total: setPoints + streakPoints, sets, streak, setPoints, streakPoints };
+  const sessions = state.history.map((item) => ({ sets: item.sets, localDay: localDayForHistory(item) }));
+  return calculateShadowScore(sessions, currentLocalDay(localTimeZone()), activeSets);
 }
 
-type AppContextValue = { state: AppState; update: (patch: Partial<AppState>) => void; reset: () => void };
+function currentStreak(history: HistoryEntry[]) {
+  const days = history.map(localDayForHistory);
+  return streakForLocalDays(days, currentLocalDay(localTimeZone()));
+}
+
+function stripBase(path: string): string {
+  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
+}
+
+type ScoreNotice = { id: number; scoreGained: number; rankedUp: boolean; rank: string };
+type AppContextValue = {
+  state: AppState;
+  update: (patch: Partial<AppState> | ((current: AppState) => Partial<AppState>)) => void;
+  reset: () => void;
+  scoreNotice: ScoreNotice | null;
+  showScoreNotice: (scoreGained: number, rankedUp: boolean, rank: string) => void;
+};
 const AppContext = createContext<AppContextValue | null>(null);
 function useApp() {
   const context = useContext(AppContext);
@@ -194,11 +284,152 @@ function useApp() {
 
 function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(readState);
-  const update = useCallback((patch: Partial<AppState>) => setState((old) => ({ ...old, ...patch })), []);
+  const [scoreNotice, setScoreNotice] = useState<ScoreNotice | null>(null);
+  const update = useCallback((patch: Partial<AppState> | ((current: AppState) => Partial<AppState>)) => {
+    setState((old) => ({ ...old, ...(typeof patch === 'function' ? patch(old) : patch) }));
+  }, []);
   const reset = useCallback(() => setState({ ...defaultState, onboarded: true }), []);
+  const showScoreNotice = useCallback((scoreGained: number, rankedUp: boolean, rank: string) => {
+    if (scoreGained <= 0 && !rankedUp) return;
+    const notice = { id: Date.now(), scoreGained, rankedUp, rank };
+    setScoreNotice(notice);
+    window.setTimeout(() => setScoreNotice((current) => current?.id === notice.id ? null : current), 5200);
+  }, []);
   useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }, [state]);
   useEffect(() => { document.documentElement.classList.toggle('light', state.theme === 'light'); }, [state.theme]);
-  return <AppContext.Provider value={{ state, update, reset }}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={{ state, update, reset, scoreNotice, showScoreNotice }}>{children}</AppContext.Provider>;
+}
+
+function ClerkQueryClientCacheInvalidator() {
+  const { addListener } = useClerk();
+  const cache = useQueryClient();
+  const previousUserId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const unsubscribe = addListener(({ user }) => {
+      const nextUserId = user?.id ?? null;
+      if (previousUserId.current !== undefined && previousUserId.current !== nextUserId) cache.clear();
+      previousUserId.current = nextUserId;
+    });
+    return unsubscribe;
+  }, [addListener, cache]);
+  return null;
+}
+
+function CommunitySyncBridge() {
+  const { state, update, showScoreNotice } = useApp();
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const cache = useQueryClient();
+  const sync = useSyncCommunityWorkouts();
+  const completedSyncs = useRef(new Map<string, string>());
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const timeZone = useMemo(() => localTimeZone(), []);
+  const params = useMemo<GetCommunityMeParams>(() => ({ timeZone }), [timeZone]);
+  const profile = useGetCommunityMe(params, {
+    query: {
+      enabled: Boolean(isLoaded && isSignedIn && userId && online),
+      queryKey: getGetCommunityMeQueryKey(params),
+      retry: false,
+    },
+  });
+
+  useEffect(() => {
+    const onlineAgain = () => {
+      setOnline(true);
+      setRefreshKey((key) => key + 1);
+      if (isSignedIn) void profile.refetch();
+    };
+    const offline = () => setOnline(false);
+    const focus = () => {
+      setRefreshKey((key) => key + 1);
+      if (isSignedIn) void profile.refetch();
+    };
+    window.addEventListener('online', onlineAgain);
+    window.addEventListener('offline', offline);
+    window.addEventListener('focus', focus);
+    return () => {
+      window.removeEventListener('online', onlineAgain);
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('focus', focus);
+    };
+  }, [isSignedIn, profile.refetch]);
+
+  const historySignature = useMemo(
+    () => state.history.map((entry) => [entry.id, entry.workoutId, entry.date, entry.localDay, entry.sets, entry.minutes].join(':')).join('|'),
+    [state.history],
+  );
+  const syncHistory = useMemo(() => state.history, [historySignature]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId || !online || !profile.data?.sharingEnabled || !syncHistory.length) return;
+    if (completedSyncs.current.get(userId) === historySignature) return;
+    const sessions = syncHistory.flatMap((entry) => {
+      const completedAt = historyTimestamp(entry);
+      if (
+        !completedAt ||
+        !entry.id ||
+        entry.id.length > 80 ||
+        !entry.workoutId ||
+        entry.workoutId.length > 100 ||
+        !Number.isInteger(entry.sets) ||
+        entry.sets < 1 ||
+        entry.sets > 100 ||
+        !Number.isInteger(entry.minutes) ||
+        entry.minutes < 1 ||
+        entry.minutes > 240
+      ) return [];
+      const localDay = isValidLocalDay(entry.localDay)
+        ? entry.localDay
+        : currentLocalDay(timeZone, completedAt);
+      return [{
+        clientSessionId: entry.id,
+        workoutId: entry.workoutId,
+        sets: entry.sets,
+        minutes: entry.minutes,
+        completedAt: completedAt.toISOString(),
+        localDay,
+      }];
+    });
+    if (!sessions.length) return;
+
+    let cancelled = false;
+    void (async () => {
+      let scoreGained = 0;
+      let rankedUp = false;
+      let rank = 'Initiate';
+      try {
+        for (let start = 0; start < sessions.length; start += 250) {
+          const result = await sync.mutateAsync({
+            data: { timeZone, sessions: sessions.slice(start, start + 250) },
+          });
+          scoreGained += result.scoreGained;
+          rankedUp ||= result.rankedUp;
+          rank = result.rank;
+        }
+        if (cancelled) return;
+        completedSyncs.current.set(userId, historySignature);
+        const pendingNotice = syncHistory.some((entry) => !entry.scoreNoticeShown && sessions.some((session) => session.clientSessionId === entry.id));
+        if (pendingNotice) showScoreNotice(scoreGained, rankedUp, rank);
+        const syncedIds = new Set(sessions.map((session) => session.clientSessionId));
+        update((current) => ({
+          history: current.history.map((entry) => syncedIds.has(entry.id) ? { ...entry, scoreNoticeShown: true } : entry),
+        }));
+        await Promise.all([
+          cache.invalidateQueries({ queryKey: getGetCommunityMeQueryKey(params) }),
+          cache.invalidateQueries({ queryKey: getGetCommunityFriendsQueryKey() }),
+          cache.invalidateQueries({ queryKey: getGetCommunityLeaderboardQueryKey() }),
+        ]);
+      } catch (error) {
+        if (!cancelled) console.warn('ShadowFit sync deferred; local workout history remains available.', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    cache, historySignature, isLoaded, isSignedIn, online, params,
+    profile.data?.sharingEnabled, refreshKey, showScoreNotice, syncHistory,
+    sync.mutateAsync, timeZone, update, userId,
+  ]);
+  return null;
 }
 
 function Logo({ compact = false, showcase = false }: { compact?: boolean; showcase?: boolean }) {
@@ -234,14 +465,45 @@ const navItems: Array<{ href: string; label: string; icon: typeof House; view: V
   { href: '/progress', label: 'Progress', icon: Activity, view: 'progress' },
   { href: '/nutrition', label: 'Fuel', icon: Leaf, view: 'nutrition' },
   { href: '/looks', label: 'Looks', icon: Sparkles, view: 'looks' },
+  { href: '/community', label: 'Community', icon: UserRound, view: 'community' },
   { href: '/settings', label: 'Settings', icon: SlidersHorizontal, view: 'settings' },
 ];
+
+function AccountAction({ mobile = false }: { mobile?: boolean }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+  if (!isLoaded) return <span className="px-3 py-2 text-xs text-muted-foreground">Account</span>;
+  if (isSignedIn) {
+    return <button type="button" onClick={() => void signOut({ redirectUrl: basePath || '/' })} className={`flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground ${mobile ? '' : 'w-full'}`} data-testid={`button-${mobile ? 'mobile-' : ''}sign-out`}>
+      <LogOut size={14} /> Sign out
+    </button>;
+  }
+  return <Link href="/sign-in" className={`flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground ${mobile ? '' : 'w-full'}`} data-testid={`link-${mobile ? 'mobile-' : ''}sign-in`}>
+    <UserRound size={14} /> Sign in
+  </Link>;
+}
+
+function ScoreNoticeBanner() {
+  const { scoreNotice } = useApp();
+  if (!scoreNotice) return null;
+  return <div className="score-notice fixed left-1/2 top-3 z-[70] w-[calc(100%-1.5rem)] max-w-md rounded-2xl border border-primary/30 bg-card px-4 py-3 shadow-2xl" role="status" aria-live="polite" data-testid="notice-shadow-score">
+    <div className="flex items-center gap-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">{scoreNotice.rankedUp ? <Trophy size={17} /> : <Sparkles size={17} />}</span>
+      <div className="min-w-0">
+        {scoreNotice.scoreGained > 0 && <p className="font-display text-sm font-bold text-primary">+{scoreNotice.scoreGained} Shadow Score</p>}
+        {scoreNotice.rankedUp && <p className="mt-0.5 text-xs font-semibold">Rank up: {scoreNotice.rank}</p>}
+        {!scoreNotice.rankedUp && <p className="mt-0.5 text-[10px] text-muted-foreground">Your progress is building.</p>}
+      </div>
+    </div>
+  </div>;
+}
 
 function Shell({ children }: { children: ReactNode }) {
   const { state } = useApp();
   const [location] = useLocation();
   const active = location === '/' ? 'today' : (location.slice(1) as View);
   return <div className="app-shell noise min-h-[100dvh]">
+    <ScoreNoticeBanner />
     <aside className="desktop-sidebar fixed inset-y-0 left-0 z-10 w-[238px] flex-col border-r border-border/70 bg-background/75 px-5 py-7 backdrop-blur-xl">
       <Logo />
       <div className="mt-12">
@@ -259,13 +521,17 @@ function Shell({ children }: { children: ReactNode }) {
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Consistency is a skill. Show up small, then show up again.</p>
           <div className="mt-4 flex items-center gap-2 text-xs font-semibold"><Flame size={14} className="text-accent" /> <span>{currentStreak(state.history)} day streak</span></div>
         </div>
+        <div className="mt-4"><AccountAction /></div>
         <p className="mt-5 px-1 font-mono text-[10px] text-muted-foreground/60">v1.0 · local by default</p>
       </div>
     </aside>
-    <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 pb-28 pt-5 sm:px-7 md:ml-[238px] md:px-10 md:pb-12 md:pt-8">{children}</main>
+    <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 pb-28 pt-5 sm:px-7 md:ml-[238px] md:px-10 md:pb-12 md:pt-8">
+      <div className="mb-3 flex justify-end md:hidden"><AccountAction mobile /></div>
+      {children}
+    </main>
     <nav className="mobile-nav safe-bottom fixed inset-x-0 bottom-0 z-20 items-center justify-around border-t border-border/80 bg-background/90 px-2 pt-2 backdrop-blur-xl" aria-label="Mobile navigation">
-      {navItems.map(({ href, label, icon: Icon, view }) => <Link key={view} href={href} className={`flex min-w-[58px] flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-semibold ${active === view ? 'text-primary' : 'text-muted-foreground'}`} data-testid={`link-mobile-nav-${view}`}>
-        <Icon size={19} strokeWidth={active === view ? 2.5 : 1.8} /><span>{label}</span>
+      {navItems.map(({ href, label, icon: Icon, view }) => <Link key={view} href={href} className={`flex min-w-[46px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-semibold ${active === view ? 'text-primary' : 'text-muted-foreground'}`} data-testid={`link-mobile-nav-${view}`}>
+        <Icon size={18} strokeWidth={active === view ? 2.5 : 1.8} /><span>{label}</span>
       </Link>)}
     </nav>
   </div>;
@@ -435,11 +701,13 @@ function WorkoutCard({ workout, selected, onSelect }: { workout: Workout; select
 }
 
 function SessionPanel({ workout }: { workout: Workout }) {
-  const { state, update } = useApp();
+  const { state, update, showScoreNotice } = useApp();
   const [location, setLocation] = useLocation();
   const active = state.active?.workoutId === workout.id ? state.active : { workoutId: workout.id, current: 0, completed: {}, started: false, paused: false, restSeconds: state.timerDefault };
   const [rest, setRest] = useState(active.restSeconds);
   const [custom, setCustom] = useState(state.customRest);
+  const [ratingEntry, setRatingEntry] = useState<HistoryEntry | null>(null);
+  const [celebrationActive, setCelebrationActive] = useState(false);
   const currentExercise = workout.exercises[active.current] ?? workout.exercises[0];
   useEffect(() => { setRest(active.restSeconds); }, [active.restSeconds]);
   useEffect(() => {
@@ -447,6 +715,11 @@ function SessionPanel({ workout }: { workout: Workout }) {
     const timer = window.setInterval(() => setRest((value) => Math.max(0, value - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [active.started, active.paused, rest]);
+  useEffect(() => {
+    if (!celebrationActive) return;
+    const timer = window.setTimeout(() => setCelebrationActive(false), 3100);
+    return () => window.clearTimeout(timer);
+  }, [celebrationActive]);
   const persist = (patch: Partial<ActiveSession>) => update({ active: { ...active, ...patch } });
   const start = () => persist({ started: true, paused: false });
   const togglePause = () => persist({ paused: !active.paused });
@@ -459,7 +732,42 @@ function SessionPanel({ workout }: { workout: Workout }) {
   const finish = () => {
     const sets = Object.values(active.completed).reduce((sum, values) => sum + values.length, 0);
     if (!sets) { window.alert('Complete at least one set before finishing.'); return; }
-    update({ active: null, history: [{ id: `${Date.now()}`, workoutId: workout.id, name: workout.name, date: new Date().toISOString(), minutes: parseInt(workout.duration, 10), sets }, ...state.history] });
+    const completedAt = new Date();
+    const entry: HistoryEntry = {
+      id: `${Date.now()}`,
+      workoutId: workout.id,
+      name: workout.name,
+      date: completedAt.toISOString(),
+      localDay: localDateKey(completedAt),
+      minutes: Math.max(1, parseInt(workout.duration, 10) || 1),
+      sets,
+      scoreNoticeShown: true,
+    };
+    const priorScore = shadowScore({ history: state.history, active: null });
+    const history = [entry, ...state.history];
+    const nextScore = shadowScore({ history, active: null });
+    const previousRank = rankForShadowScore(priorScore.total);
+    const nextRank = rankForShadowScore(nextScore.total);
+    update({ active: null, history });
+    showScoreNotice(
+      Math.max(0, nextScore.total - priorScore.total),
+      nextRank.level > previousRank.level,
+      nextRank.title,
+    );
+    if (isComplete) {
+      setRatingEntry(entry);
+      setCelebrationActive(true);
+    } else {
+      setLocation('/progress');
+    }
+  };
+  const saveFeeling = (feeling: WorkoutFeeling | null) => {
+    if (ratingEntry) {
+      update((current) => ({
+        history: current.history.map((entry) => entry.id === ratingEntry.id ? { ...entry, feeling } : entry),
+      }));
+    }
+    setRatingEntry(null);
     setLocation('/progress');
   };
   const setCurrent = (next: number) => persist({ current: Math.max(0, Math.min(workout.exercises.length - 1, next)) });
@@ -468,7 +776,19 @@ function SessionPanel({ workout }: { workout: Workout }) {
   const completedExercises = workout.exercises.filter((exercise) => (active.completed[exercise.id] ?? []).length === exercise.sets).length;
   const isComplete = completedSets === totalSets;
   const formatTimer = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
-  return <section className="card overflow-hidden">
+  const feelings = [
+    { id: 'great' as const, label: 'Great', Icon: Smile, color: 'text-primary' },
+    { id: 'good' as const, label: 'Good', Icon: Smile, color: 'text-lime-400' },
+    { id: 'okay' as const, label: 'Okay', Icon: Meh, color: 'text-accent' },
+    { id: 'tough' as const, label: 'Tough', Icon: Frown, color: 'text-orange-400' },
+    { id: 'rough' as const, label: 'Rough', Icon: Frown, color: 'text-destructive' },
+  ];
+  const confettiColors = ['#baff18', '#51d5c2', '#ffad54', '#a78bfa', '#f5f3e8'];
+  return <>
+  {celebrationActive && <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" aria-hidden="true" data-testid="workout-confetti">
+    {Array.from({ length: 32 }, (_, index) => <span key={index} className="confetti-piece" style={{ left: `${(index * 37) % 100}%`, animationDelay: `${(index % 9) * 75}ms`, backgroundColor: confettiColors[index % confettiColors.length] }} />)}
+  </div>}
+  <section className="card overflow-hidden">
     <div className="border-b border-border p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><Pill color="volt">{workout.level}</Pill><span className="text-xs text-muted-foreground">{workout.focus}</span></div><h2 className="font-display mt-3 text-3xl font-bold tracking-[-.05em]">{workout.name}</h2><p className="mt-2 max-w-xl text-sm text-muted-foreground">{workout.description}</p></div><div className="text-right"><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Checklist</p><p className="font-display mt-1 text-3xl font-bold">{completedExercises}<span className="text-base text-muted-foreground">/{workout.exercises.length}</span></p><p className="mt-1 text-[10px] text-muted-foreground">exercises complete</p></div></div><ProgressBar value={(completedSets / totalSets) * 100} className="mt-6" /></div>
     <div className="grid lg:grid-cols-[1.2fr_.8fr]">
       <div className="border-b border-border p-5 sm:p-7 lg:border-b-0 lg:border-r">
@@ -479,7 +799,23 @@ function SessionPanel({ workout }: { workout: Workout }) {
       </div>
       <div className="p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Rest timer</p><p className="mt-1 text-sm text-muted-foreground">{active.paused ? 'Paused' : rest > 0 && active.started ? 'Breathe. Stay ready.' : 'Ready for your next set.'}</p></div><TimerReset size={19} className="text-primary" /></div><div className="my-8 text-center"><p className={`font-mono text-6xl font-medium tracking-[-.08em] ${rest > 0 && active.started ? 'text-primary' : ''}`} data-testid="text-rest-timer">{formatTimer(rest)}</p><div className="mx-auto mt-4 h-1 max-w-[190px] overflow-hidden rounded-full bg-secondary"><div className="h-full bg-primary transition-all" style={{ width: `${active.started ? Math.min(100, (rest / Math.max(1, active.restSeconds)) * 100) : 0}%` }} /></div></div><div className="grid grid-cols-4 gap-1.5">{[30, 60, 90, 120].map((seconds) => <button type="button" key={seconds} onClick={() => { setRest(seconds); persist({ restSeconds: seconds }); }} className={`rounded-lg py-2 text-[11px] font-semibold ${active.restSeconds === seconds ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`} data-testid={`button-rest-${seconds}`}>{seconds}s</button>)}</div><div className="mt-2 flex gap-2"><input type="number" min={10} max={600} value={custom} onChange={(e) => setCustom(Number(e.target.value))} className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-xs outline-none" aria-label="Custom rest seconds" data-testid="input-custom-rest" /><button type="button" onClick={() => { setRest(custom); update({ customRest: custom }); persist({ restSeconds: custom }); }} className="rounded-lg border border-border px-3 text-xs font-semibold hover:bg-secondary" data-testid="button-custom-rest">Set</button></div><button type="button" onClick={() => { setRest(0); persist({ restSeconds: 0 }); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary" data-testid="button-skip-rest"><SkipForward size={14} /> Skip rest</button><div className="mt-8 border-t border-border pt-5"><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Quick note</p><p className="mt-2 text-xs leading-5 text-muted-foreground">You can leave a set incomplete. A useful session beats a perfect plan you never start.</p></div></div>
     </div>
-  </section>;
+  </section>
+  {ratingEntry && <div className="fixed inset-0 z-[65] flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="workout-rating-title" data-testid="overlay-workout-rating">
+    <div className="w-full max-w-xl rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-7">
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Trophy size={22} /></div>
+      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-[.18em] text-primary">Session complete</p>
+      <h2 id="workout-rating-title" className="font-display mt-2 text-center text-2xl font-bold tracking-tight">How did that workout feel?</h2>
+      <p className="mt-2 text-center text-xs text-muted-foreground">Your rating stays on this device.</p>
+      <div className="mt-6 grid grid-cols-5 gap-2">
+        {feelings.map(({ id, label, Icon, color }) => <button key={id} type="button" onClick={() => saveFeeling(id)} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-secondary/35 px-1 py-3 transition hover:border-primary/50 hover:bg-primary/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Rate workout ${label.toLowerCase()}`} data-testid={`button-workout-feeling-${id}`}>
+          <Icon size={25} className={color} strokeWidth={1.8} />
+          <span className="text-[10px] font-semibold">{label}</span>
+        </button>)}
+      </div>
+      <button type="button" onClick={() => saveFeeling(null)} className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-muted-foreground hover:bg-secondary" data-testid="button-skip-workout-rating">Skip rating</button>
+    </div>
+  </div>}
+  </>;
 }
 
 function WorkoutPage() {
@@ -751,7 +1087,7 @@ function Settings() {
     }
   };
   const resetAll = () => { if (confirmReset) { reset(); setConfirmReset(false); } else setConfirmReset(true); };
-  return <div className="page-enter"><Topbar eyebrow="Make it yours" title="Settings" /><div className="grid gap-4 lg:grid-cols-[1.05fr_.95fr]"><section className="card p-5 sm:p-7"><SectionHead icon={<Target size={18} />} eyebrow="Training intent" title="Your goal" /><div className="mt-6 space-y-2">{goals.map((item) => <button type="button" key={item.id} onClick={() => update({ goal: item.id })} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left ${state.goal === item.id ? 'selection-ring border-primary bg-primary/[.08]' : 'border-border bg-secondary/30'}`} data-testid={`button-settings-goal-${item.id}`}><span className="font-mono text-xs text-primary">{item.mark}</span><span className="flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-1 block text-xs text-muted-foreground">{item.detail}</span></span>{state.goal === item.id && <Check size={16} className="text-primary" />}</button>)}</div><div className="mt-8 border-t border-border pt-6"><SectionHead icon={<Bell size={18} />} eyebrow="Nudges" title="Reminder times" /><div className="mt-4 grid gap-3 sm:grid-cols-3"><ReminderInput label="Workout" value={state.reminder} onChange={(value) => update({ reminder: value })} testId="input-reminder-time" /><ReminderInput label="Hydration" value={state.hydrationReminder} onChange={(value) => update({ hydrationReminder: value })} testId="input-hydration-reminder" /><ReminderInput label="Meals" value={state.mealReminder} onChange={(value) => update({ mealReminder: value })} testId="input-meal-reminder" /></div><p className="mt-3 text-xs text-muted-foreground">Times are saved on this device. Browser notifications still require permission below.</p><div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/40 p-3.5"><div><p className="text-sm font-semibold">Browser notifications</p><p className="mt-1 text-xs text-muted-foreground" data-testid="status-notifications">{state.notifications}</p></div><button type="button" onClick={requestNotifications} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground" data-testid="button-request-notifications">Enable</button></div></div></section><div className="space-y-4"><section className="card p-5 sm:p-7"><SectionHead icon={<Settings2 size={18} />} eyebrow="Preferences" title="Environment" /><div className="mt-6 space-y-4"><SettingRow label="Units" detail="Used for future distance and weight notes"><div className="flex rounded-lg bg-secondary p-1">{(['metric', 'imperial'] as const).map((unit) => <button type="button" key={unit} onClick={() => update({ units: unit })} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize ${state.units === unit ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`} data-testid={`button-units-${unit}`}>{unit}</button>)}</div></SettingRow><SettingRow label="Theme" detail="Keep the blackout or bring in daylight"><button type="button" onClick={() => update({ theme: state.theme === 'dark' ? 'light' : 'dark' })} className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-xs font-semibold" data-testid="button-toggle-theme">{state.theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}{state.theme === 'dark' ? 'Dark' : 'Light'}</button></SettingRow><SettingRow label="Rest default" detail="Used when a new exercise starts"><select value={state.timerDefault} onChange={(e) => update({ timerDefault: Number(e.target.value) })} className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs outline-none" data-testid="select-rest-default">{[30, 60, 90, 120].map((value) => <option key={value} value={value}>{value} seconds</option>)}</select></SettingRow></div></section><section className="card p-5 sm:p-7"><SectionHead icon={<Info size={18} />} eyebrow="Device" title="About ShadowFit" /><p className="mt-5 text-sm leading-6 text-muted-foreground">A local-first training ritual. Your data is saved in this browser and is never sent anywhere by ShadowFit.</p><div className="mt-5 flex items-center gap-2 text-xs text-primary"><ShieldCheck size={15} /> Private by default</div><div className="mt-6 border-t border-border pt-5"><button type="button" onClick={resetAll} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${confirmReset ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-muted-foreground'}`} data-testid="button-reset-app">{confirmReset ? 'Tap again to reset' : 'Reset workout & progress'} <RotateCcw size={14} /></button>{confirmReset && <button type="button" onClick={() => setConfirmReset(false)} className="ml-3 text-xs text-muted-foreground" data-testid="button-cancel-reset">Cancel</button>}</div></section></div></div></div>;
+  return <div className="page-enter"><Topbar eyebrow="Make it yours" title="Settings" /><div className="grid gap-4 lg:grid-cols-[1.05fr_.95fr]"><section className="card p-5 sm:p-7"><SectionHead icon={<Target size={18} />} eyebrow="Training intent" title="Your goal" /><div className="mt-6 space-y-2">{goals.map((item) => <button type="button" key={item.id} onClick={() => update({ goal: item.id })} className={`flex w-full items-center gap-3 rounded-xl border p-3.5 text-left ${state.goal === item.id ? 'selection-ring border-primary bg-primary/[.08]' : 'border-border bg-secondary/30'}`} data-testid={`button-settings-goal-${item.id}`}><span className="font-mono text-xs text-primary">{item.mark}</span><span className="flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="mt-1 block text-xs text-muted-foreground">{item.detail}</span></span>{state.goal === item.id && <Check size={16} className="text-primary" />}</button>)}</div><div className="mt-8 border-t border-border pt-6"><SectionHead icon={<Bell size={18} />} eyebrow="Nudges" title="Reminder times" /><div className="mt-4 grid gap-3 sm:grid-cols-3"><ReminderInput label="Workout" value={state.reminder} onChange={(value) => update({ reminder: value })} testId="input-reminder-time" /><ReminderInput label="Hydration" value={state.hydrationReminder} onChange={(value) => update({ hydrationReminder: value })} testId="input-hydration-reminder" /><ReminderInput label="Meals" value={state.mealReminder} onChange={(value) => update({ mealReminder: value })} testId="input-meal-reminder" /></div><p className="mt-3 text-xs text-muted-foreground">Times are saved on this device. Browser notifications still require permission below.</p><div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/40 p-3.5"><div><p className="text-sm font-semibold">Browser notifications</p><p className="mt-1 text-xs text-muted-foreground" data-testid="status-notifications">{state.notifications}</p></div><button type="button" onClick={requestNotifications} className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground" data-testid="button-request-notifications">Enable</button></div></div></section><div className="space-y-4"><section className="card p-5 sm:p-7"><SectionHead icon={<Settings2 size={18} />} eyebrow="Preferences" title="Environment" /><div className="mt-6 space-y-4"><SettingRow label="Units" detail="Used for future distance and weight notes"><div className="flex rounded-lg bg-secondary p-1">{(['metric', 'imperial'] as const).map((unit) => <button type="button" key={unit} onClick={() => update({ units: unit })} className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize ${state.units === unit ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`} data-testid={`button-units-${unit}`}>{unit}</button>)}</div></SettingRow><SettingRow label="Theme" detail="Keep the blackout or bring in daylight"><button type="button" onClick={() => update({ theme: state.theme === 'dark' ? 'light' : 'dark' })} className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-xs font-semibold" data-testid="button-toggle-theme">{state.theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}{state.theme === 'dark' ? 'Dark' : 'Light'}</button></SettingRow><SettingRow label="Rest default" detail="Used when a new exercise starts"><select value={state.timerDefault} onChange={(e) => update({ timerDefault: Number(e.target.value) })} className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs outline-none" data-testid="select-rest-default">{[30, 60, 90, 120].map((value) => <option key={value} value={value}>{value} seconds</option>)}</select></SettingRow></div></section><section className="card p-5 sm:p-7"><SectionHead icon={<Info size={18} />} eyebrow="Device" title="About ShadowFit" /><p className="mt-5 text-sm leading-6 text-muted-foreground">Your workout history, appearance photos, and ratings remain on this device. When friends-only sharing is enabled, workout sessions also sync to calculate your score; only accepted friends can see it.</p><div className="mt-5 flex items-center gap-2 text-xs text-primary"><ShieldCheck size={15} /> Private by default</div><div className="mt-6 border-t border-border pt-5"><button type="button" onClick={resetAll} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${confirmReset ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-muted-foreground'}`} data-testid="button-reset-app">{confirmReset ? 'Tap again to reset local data' : 'Reset this device’s workout & progress'} <RotateCcw size={14} /></button>{confirmReset && <><p className="mt-2 text-xs leading-5 text-muted-foreground">This clears local history only. Workout sessions already synced to your ShadowFit account remain.</p><button type="button" onClick={() => setConfirmReset(false)} className="ml-3 text-xs text-muted-foreground" data-testid="button-cancel-reset">Cancel</button></>}</div></section></div></div></div>;
 }
 
 function ReminderInput({ label, value, onChange, testId }: { label: string; value: string; onChange: (value: string) => void; testId: string }) {
@@ -770,13 +1106,15 @@ function EmptyState({ icon, title, copy }: { icon: ReactNode; title: string; cop
 
 function AppRoutes() {
   const { state } = useApp();
-  if (!state.onboarded) return <Onboarding />;
+  const [location] = useLocation();
+  if (!state.onboarded && location !== '/community') return <Onboarding />;
   return <Switch>
     <Route path="/"><Shell><Today /></Shell></Route>
     <Route path="/workout"><Shell><WorkoutPage /></Shell></Route>
     <Route path="/progress"><Shell><Progress /></Shell></Route>
     <Route path="/nutrition"><Shell><Nutrition /></Shell></Route>
     <Route path="/looks"><Shell><Looks /></Shell></Route>
+    <Route path="/community"><Shell><CommunityHub /></Shell></Route>
     <Route path="/settings"><Shell><Settings /></Shell></Route>
     <Route component={NotFound} />
   </Switch>;
@@ -787,13 +1125,67 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
 }
 
-function App() {
+function SignInPage() {
+  return <div className="app-shell noise flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
+    <Link href="/" className="mb-5 flex items-center gap-2.5 text-xs font-extrabold tracking-[.18em] text-foreground" aria-label="ShadowFit home">
+      <img src={`${basePath}/logo.svg`} alt="" className="h-9 w-9 rounded-xl" /> SHADOWFIT
+    </Link>
+    <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+  </div>;
+}
+
+function SignUpPage() {
+  return <div className="app-shell noise flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
+    <Link href="/" className="mb-5 flex items-center gap-2.5 text-xs font-extrabold tracking-[.18em] text-foreground" aria-label="ShadowFit home">
+      <img src={`${basePath}/logo.svg`} alt="" className="h-9 w-9 rounded-xl" /> SHADOWFIT
+    </Link>
+    <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+  </div>;
+}
+
+function ClerkRoutes() {
+  const [, setLocation] = useLocation();
+  return <ClerkProvider
+    publishableKey={clerkPubKey}
+    proxyUrl={clerkProxyUrl}
+    appearance={clerkAppearance}
+    signInUrl={`${basePath}/sign-in`}
+    signUpUrl={`${basePath}/sign-up`}
+    localization={{
+      signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to return to your training circle.' } },
+      signUp: { start: { title: 'Create your ShadowFit account', subtitle: 'Your workouts stay local unless you choose to share.' } },
+    }}
+    routerPush={(to) => setLocation(stripBase(to))}
+    routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
+  >
+    <ClerkQueryClientCacheInvalidator />
+    <Switch>
+      <Route path="/sign-in/*?" component={SignInPage} />
+      <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route component={MainApp} />
+    </Switch>
+  </ClerkProvider>;
+}
+
+function MainApp() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 850);
     return () => window.clearTimeout(timer);
   }, []);
-  return <QueryClientProvider client={queryClient}><TooltipProvider>{loading ? <LoadingScreen /> : <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><AppProvider><RoutedErrorBoundary><AppRoutes /></RoutedErrorBoundary></AppProvider></WouterRouter>}<Toaster /></TooltipProvider></QueryClientProvider>;
+  return loading ? <LoadingScreen /> : <AppProvider>
+    <CommunitySyncBridge />
+    <RoutedErrorBoundary><AppRoutes /></RoutedErrorBoundary>
+  </AppProvider>;
+}
+
+function App() {
+  return <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <WouterRouter base={basePath}><ClerkRoutes /></WouterRouter>
+      <Toaster />
+    </TooltipProvider>
+  </QueryClientProvider>;
 }
 
 export default App;

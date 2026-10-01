@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface FriendRequestInput {
+  /**
+     * @minLength 3
+     * @maxLength 20
+     */
+  username: string;
 }
