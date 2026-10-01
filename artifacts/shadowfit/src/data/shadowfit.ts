@@ -3,6 +3,7 @@ export type View = 'today' | 'workout' | 'progress' | 'nutrition' | 'looks' | 's
 export type FaceShape = 'oval' | 'round' | 'square' | 'heart' | 'oblong' | 'diamond';
 export type OutfitStyle = 'casual' | 'sporty' | 'smart-casual' | 'streetwear';
 export type OutfitAdvice = 'men' | 'women';
+export type NutritionGoal = 'maintain' | 'gain' | 'lose';
 
 export type Exercise = {
   id: string;
@@ -42,11 +43,14 @@ export const faceShapes: Array<{ id: FaceShape; label: string; detail: string }>
 ];
 
 export const lookRecommendations: Record<FaceShape, {
-  haircuts: string[];
+  haircuts: Record<OutfitAdvice, string[]>;
   routine: Array<{ name: string; detail: string }>;
 }> = {
   oval: {
-    haircuts: ['Textured crop', 'Classic taper', 'Medium length with natural volume'],
+    haircuts: {
+      men: ['Textured crop', 'Classic taper', 'Medium length with natural volume'],
+      women: ['Collarbone-length layers', 'Soft curtain fringe', 'Jaw-length bob with movement'],
+    },
     routine: [
       { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
       { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
@@ -54,7 +58,10 @@ export const lookRecommendations: Record<FaceShape, {
     ],
   },
   round: {
-    haircuts: ['High taper with texture', 'Side-swept top', 'Short sides with height'],
+    haircuts: {
+      men: ['High taper with texture', 'Side-swept top', 'Short sides with height'],
+      women: ['Long face-framing layers', 'Angled lob with a side part', 'Textured layers with crown volume'],
+    },
     routine: [
       { name: 'Posture reset', detail: 'Stack ears over shoulders and take 5 slow breaths.' },
       { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
@@ -62,7 +69,10 @@ export const lookRecommendations: Record<FaceShape, {
     ],
   },
   square: {
-    haircuts: ['Crew cut with taper', 'Messy medium crop', 'Classic side part'],
+    haircuts: {
+      men: ['Crew cut with taper', 'Messy medium crop', 'Classic side part'],
+      women: ['Soft layers with curtain fringe', 'Textured long bob', 'Side-swept waves'],
+    },
     routine: [
       { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
       { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
@@ -70,7 +80,10 @@ export const lookRecommendations: Record<FaceShape, {
     ],
   },
   heart: {
-    haircuts: ['Layered fringe', 'Side-parted medium cut', 'Low taper with soft texture'],
+    haircuts: {
+      men: ['Layered fringe', 'Side-parted medium cut', 'Low taper with soft texture'],
+      women: ['Feathered layers with side fringe', 'Collarbone-length lob', 'Chin-length bob with soft ends'],
+    },
     routine: [
       { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
       { name: 'Shoulder drop', detail: 'Lift the shoulders, exhale, and let them fall. Repeat 8 times.' },
@@ -78,7 +91,10 @@ export const lookRecommendations: Record<FaceShape, {
     ],
   },
   oblong: {
-    haircuts: ['Textured fringe', 'Medium layered cut', 'Classic side-swept style'],
+    haircuts: {
+      men: ['Textured fringe', 'Medium layered cut', 'Classic side-swept style'],
+      women: ['Chin-length bob or textured lob', 'Full or curtain fringe', 'Shoulder-length layers'],
+    },
     routine: [
       { name: 'Posture reset', detail: 'Stack ears over shoulders and take 5 slow breaths.' },
       { name: 'Neck rotation', detail: 'Turn slowly side to side through a comfortable range. 5 each side.' },
@@ -86,7 +102,10 @@ export const lookRecommendations: Record<FaceShape, {
     ],
   },
   diamond: {
-    haircuts: ['Side-swept texture', 'Layered crop', 'Soft quiff with tapered sides'],
+    haircuts: {
+      men: ['Side-swept texture', 'Layered crop', 'Soft quiff with tapered sides'],
+      women: ['Soft face-framing layers', 'Side-swept fringe', 'Chin-length textured bob'],
+    },
     routine: [
       { name: 'Jaw release', detail: 'Rest the tongue softly and let the jaw hang loose. Breathe for 30 seconds.' },
       { name: 'Chin tuck', detail: 'Slide the chin gently back without looking down. Hold 5 seconds × 6.' },
@@ -165,9 +184,25 @@ export const workouts: Workout[] = [
   },
 ];
 
-export const mealSets = [
-  { title: 'Breakfast', meals: ['Greek yogurt, oats + berries', 'Eggs on sourdough + greens', 'Overnight oats with peanut butter', 'Cottage cheese, banana + cinnamon'] },
-  { title: 'Lunch', meals: ['Chicken rice bowl with crunchy greens', 'Tuna, white bean + lemon salad', 'Tofu soba with sesame cabbage', 'Turkey wrap with hummus + peppers'] },
-  { title: 'Dinner', meals: ['Salmon, potatoes + charred broccoli', 'Turkey chili with avocado', 'Ginger beef noodles + bok choy', 'Lentil curry with basmati rice'] },
-  { title: 'Snack', meals: ['Apple + a handful of almonds', 'Protein shake + frozen banana', 'Rice cakes with cottage cheese', 'Edamame with sea salt'] },
-];
+type MealSet = { title: string; meals: string[] };
+
+export const mealSetsByGoal: Record<NutritionGoal, MealSet[]> = {
+  maintain: [
+    { title: 'Breakfast', meals: ['Greek yogurt, oats + berries', 'Eggs on sourdough + greens', 'Overnight oats with peanut butter', 'Cottage cheese, banana + cinnamon'] },
+    { title: 'Lunch', meals: ['Chicken rice bowl with crunchy greens', 'Tuna, white bean + lemon salad', 'Tofu soba with sesame cabbage', 'Turkey wrap with hummus + peppers'] },
+    { title: 'Dinner', meals: ['Salmon, potatoes + charred broccoli', 'Turkey chili with avocado', 'Ginger beef noodles + bok choy', 'Lentil curry with basmati rice'] },
+    { title: 'Snack', meals: ['Apple + a handful of almonds', 'Protein shake + frozen banana', 'Rice cakes with cottage cheese', 'Edamame with sea salt'] },
+  ],
+  gain: [
+    { title: 'Breakfast', meals: ['Oats with milk, Greek yogurt, banana + peanut butter', 'Eggs, avocado + whole-grain toast', 'Greek yogurt bowl with granola, fruit + seeds', 'Smoothie with milk, banana, oats + nut butter'] },
+    { title: 'Lunch', meals: ['Chicken, rice, avocado + olive-oil greens bowl', 'Tofu and peanut-sesame soba with edamame', 'Tuna and hummus whole-grain wrap with yogurt', 'Lentil quinoa bowl with feta and tahini'] },
+    { title: 'Dinner', meals: ['Salmon, rice + roasted vegetables with olive oil', 'Chicken pesto pasta with peas', 'Beef and bean chili over rice', 'Lentil coconut curry with basmati rice + cashews'] },
+    { title: 'Snack', meals: ['Trail mix with dried fruit and nuts', 'Greek yogurt with granola', 'Peanut-butter banana toast', 'Cottage cheese with fruit and seeds'] },
+  ],
+  lose: [
+    { title: 'Breakfast', meals: ['Greek yogurt with berries, oats + chia', 'Vegetable omelet with whole-grain toast', 'Cottage cheese with fruit + cinnamon', 'Overnight oats with berries and extra yogurt'] },
+    { title: 'Lunch', meals: ['Chicken and bean salad with crunchy greens', 'Tuna and white-bean salad with lemon', 'Tofu bowl with vegetables and brown rice', 'Turkey wrap with hummus, peppers + salad'] },
+    { title: 'Dinner', meals: ['Salmon with roasted vegetables and potatoes', 'Turkey chili with beans and extra vegetables', 'Ginger beef with bok choy and vegetables', 'Lentil curry with vegetables and a side of rice'] },
+    { title: 'Snack', meals: ['Apple with cottage cheese', 'Greek yogurt with berries', 'Carrots, peppers + hummus', 'Edamame with sea salt'] },
+  ],
+};

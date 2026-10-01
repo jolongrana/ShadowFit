@@ -12,7 +12,7 @@ import {
   Trophy, UserRound, Volume2, Waves, X,
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
-import { faceShapes, goals, lookRecommendations, mealSets, workouts, type Exercise, type FaceShape, type Goal, type OutfitAdvice, type OutfitStyle, type View, type Workout } from './data/shadowfit';
+import { faceShapes, goals, lookRecommendations, mealSetsByGoal, workouts, type Exercise, type FaceShape, type Goal, type NutritionGoal, type OutfitAdvice, type OutfitStyle, type View, type Workout } from './data/shadowfit';
 
 const queryClient = new QueryClient();
 const STORE_KEY = 'shadowfit-local-v1';
@@ -43,6 +43,7 @@ type AppState = {
   notifications: string;
   hydration: number;
   mealOffsets: number[];
+  nutritionGoal: NutritionGoal;
   weatherLabel: string;
   weatherTemp: string;
   weatherCondition: string;
@@ -59,7 +60,7 @@ type AppState = {
 const defaultState: AppState = {
   onboarded: false, name: 'Athlete', goal: 'strength', favoriteWorkout: 'beginner-full-body',
   active: null, history: [], timerDefault: 60, customRest: 75, reminder: '18:30', hydrationReminder: '10:00', mealReminder: '12:30', units: 'metric',
-  theme: 'dark', notifications: 'Not requested', hydration: 3, mealOffsets: [0, 0, 0, 0],
+  theme: 'dark', notifications: 'Not requested', hydration: 3, mealOffsets: [0, 0, 0, 0], nutritionGoal: 'maintain',
   weatherLabel: 'Indoor is always on', weatherTemp: '—', weatherCondition: 'Manual fallback', weatherRecommendation: 'Indoor workout recommended.',
   lookPhoto: '', faceShape: null,
   dailySteps: {}, lookHeight: '', lookShoulderWidth: '', outfitStyle: 'casual', outfitAdvice: 'men',
@@ -77,6 +78,7 @@ function readState(): AppState {
       mealReminder: saved.mealReminder ?? defaultState.mealReminder,
       weatherCondition: saved.weatherCondition ?? defaultState.weatherCondition,
       weatherRecommendation: saved.weatherRecommendation ?? defaultState.weatherRecommendation,
+      nutritionGoal: saved.nutritionGoal ?? defaultState.nutritionGoal,
       dailySteps: saved.dailySteps ?? defaultState.dailySteps,
       lookHeight: saved.lookHeight ?? defaultState.lookHeight,
       lookShoulderWidth: saved.lookShoulderWidth ?? defaultState.lookShoulderWidth,
@@ -634,6 +636,17 @@ function Looks() {
 
   return <div className="page-enter">
     <Topbar eyebrow="Personal presentation" title="Looks" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-looks-home"><House size={14} /> Today</Link>} />
+    <section className="card mb-4 flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" data-testid="switch-outfit-advice">
+      <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Personalize advice</p><p className="mt-1 text-sm font-semibold">Show outfit and haircut ideas for</p><p className="mt-1 text-xs text-muted-foreground">This changes the style suggestions, not your profile or identity.</p></div>
+      <fieldset>
+        <legend className="sr-only">Advice style</legend>
+        <div className="flex rounded-xl border border-border bg-secondary/50 p-1" role="group" aria-label="Choose whether to show men's or women's advice">
+          {(['men', 'women'] as const).map((advice) => <button key={advice} type="button" aria-pressed={state.outfitAdvice === advice} onClick={() => update({ outfitAdvice: advice })} className={`flex min-w-24 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold capitalize transition ${state.outfitAdvice === advice ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'}`} data-testid={`button-outfit-advice-${advice}`}>
+            {state.outfitAdvice === advice && <Check size={15} aria-hidden="true" />}{advice}
+          </button>)}
+        </div>
+      </fieldset>
+    </section>
     <div className="grid gap-4 lg:grid-cols-[.82fr_1.18fr]">
       <section className="card p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Your reference</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Find your frame.</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Upload a photo to keep beside your haircut and posture notes. It stays on this device.</p></div><Sparkles className="text-primary" size={22} /></div>
@@ -647,21 +660,15 @@ function Looks() {
         <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">{faceShapes.map((shape) => <button type="button" key={shape.id} disabled={!state.lookPhoto} onClick={() => update({ faceShape: shape.id })} className={`rounded-xl border p-3 text-left transition ${state.faceShape === shape.id ? 'selection-ring border-primary bg-primary/[.08]' : 'border-border bg-secondary/30 hover:bg-secondary/60'} disabled:cursor-not-allowed disabled:opacity-45`} data-testid={`button-face-shape-${shape.id}`}><span className="font-mono text-[10px] text-primary">{shape.label}</span><span className="mt-2 block text-xs leading-4 text-muted-foreground">{shape.detail}</span></button>)}</div>
         {!state.lookPhoto && <p className="mt-4 text-xs text-muted-foreground">Upload a reference photo first, then choose the shape that looks closest to you.</p>}
         {recommendation && <div className="mt-6 space-y-4">
-          <section className="rounded-2xl bg-secondary/50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Haircut directions</p><h3 className="font-display mt-1 text-lg font-bold">{shapeLabel} shape</h3></div><VideoGuide query={`${shapeLabel} face shape haircut`} label="Watch ideas" testId="link-video-haircut" /></div><div className="mt-4 flex flex-wrap gap-2">{recommendation.haircuts.map((cut) => <span key={cut} className="rounded-full border border-border px-3 py-2 text-xs font-semibold">{cut}</span>)}</div></section>
+          <section className="rounded-2xl bg-secondary/50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Haircut directions · {state.outfitAdvice}</p><h3 className="font-display mt-1 text-lg font-bold">{shapeLabel} shape</h3></div><VideoGuide query={`${shapeLabel} face shape ${state.outfitAdvice} haircut`} label="Watch ideas" testId="link-video-haircut" /></div><div className="mt-4 flex flex-wrap gap-2">{recommendation.haircuts[state.outfitAdvice].map((cut) => <span key={cut} className="rounded-full border border-border px-3 py-2 text-xs font-semibold">{cut}</span>)}</div></section>
           <section className="rounded-2xl bg-secondary/50 p-4"><div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Face & neck routine</p><h3 className="font-display mt-1 text-lg font-bold">Relaxed, aligned, repeatable.</h3><p className="mt-2 text-xs leading-5 text-muted-foreground">These movements support posture and jaw relaxation. They do not change bone structure or replace professional care.</p></div><div className="mt-4 space-y-2">{recommendation.routine.map((item, index) => <div key={item.name} className="flex items-start gap-3 rounded-xl border border-border bg-card/60 p-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><div className="flex-1"><p className="text-sm font-semibold">{item.name}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.detail}</p></div><VideoGuide query={`${item.name} neck posture exercise`} label="Video" testId={`link-video-face-routine-${index}`} /></div>)}</div></section>
         </div>}
       </section>
     </div>
     <section className="card mt-4 p-5 sm:p-7" data-testid="section-outfit-ideas">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
         <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Wear the season</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Outfit ideas for {season.toLowerCase()}.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Suggestions use your height, shoulder width, and chosen style. Season follows the calendar on your device.</p></div>
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3">
-          <span className={`text-xs font-semibold ${state.outfitAdvice === 'men' ? 'text-foreground' : 'text-muted-foreground'}`}>Men</span>
-          <button type="button" role="switch" aria-checked={state.outfitAdvice === 'women'} aria-label="Switch outfit advice between men and women" onClick={() => update({ outfitAdvice: state.outfitAdvice === 'men' ? 'women' : 'men' })} className={`relative h-6 w-11 rounded-full transition-colors ${state.outfitAdvice === 'women' ? 'bg-primary' : 'bg-muted'}`} data-testid="switch-outfit-advice"><span className={`absolute top-1 h-4 w-4 rounded-full bg-background transition-transform ${state.outfitAdvice === 'women' ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-          <span className={`text-xs font-semibold ${state.outfitAdvice === 'women' ? 'text-foreground' : 'text-muted-foreground'}`}>Women</span>
-        </div>
       </div>
-      <p className="mt-3 text-[11px] text-muted-foreground">Advice for: <span className="font-semibold text-foreground">{state.outfitAdvice === 'men' ? 'men' : 'women'}</span>. Switch again any time to see the other set.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-[.85fr_1.15fr]">
         <div className="space-y-5">
           <fieldset><legend className="mb-2 text-xs font-semibold">Choose your style</legend><div className="flex flex-wrap gap-2">{outfitStyles.map((style) => <button type="button" key={style.id} onClick={() => update({ outfitStyle: style.id })} aria-pressed={state.outfitStyle === style.id} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${state.outfitStyle === style.id ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/70'}`} data-testid={`button-outfit-style-${style.id}`}>{style.label}</button>)}</div></fieldset>
@@ -689,8 +696,42 @@ function Metric({ label, value, icon }: { label: string; value: string; icon: Re
 
 function Nutrition() {
   const { state, update } = useApp();
+  const mealSets = mealSetsByGoal[state.nutritionGoal];
+  const goalsForEating: Array<{ id: NutritionGoal; label: string; detail: string }> = [
+    { id: 'maintain', label: 'Maintain', detail: 'Balanced everyday meal ideas.' },
+    { id: 'gain', label: 'Gain weight', detail: 'More energy-dense meals and snacks.' },
+    { id: 'lose', label: 'Lose weight', detail: 'Filling meals with protein and vegetables.' },
+  ];
   const rotate = (index: number) => update({ mealOffsets: state.mealOffsets.map((value, mealIndex) => mealIndex === index ? (value + 1) % mealSets[index].meals.length : value) });
-  return <div className="page-enter"><Topbar eyebrow="Eat like it matters" title="Nutrition" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-nutrition-home"><House size={14} /> Today</Link>} /><div className="rounded-2xl border border-accent/25 bg-accent/[.08] p-5 sm:p-7"><div className="flex items-start gap-4"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground"><HeartPulse size={21} /></div><div><Pill color="orange">Goal · {goals.find((item) => item.id === state.goal)?.label}</Pill><h2 className="font-display mt-3 text-2xl font-bold tracking-tight">Feed the adaptation.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">These are starting points, not rules. Make the easy choice available before hunger gets loud.</p></div></div><div className="mt-6 grid gap-2 sm:grid-cols-3"><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">PROTEIN</p><p className="mt-2 text-sm font-bold">Every meal</p></div><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">WATER</p><p className="mt-2 text-sm font-bold">{state.hydration}/5 reminders checked</p></div><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">TIMING</p><p className="mt-2 text-sm font-bold">Train fed, not full</p></div></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{mealSets.map((meal, index) => <MealCard key={meal.title} meal={meal.title} idea={meal.meals[(state.mealOffsets[index] ?? 0) % meal.meals.length]} index={index} onSwap={() => rotate(index)} />)}</div><div className="mt-4 card flex items-center gap-4 p-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary"><Waves size={19} /></div><div className="flex-1"><p className="text-sm font-bold">Water, before the reminder.</p><p className="mt-1 text-xs text-muted-foreground">Tap a glass when you finish it. Five is a solid day.</p></div><div className="flex gap-1">{[0, 1, 2, 3, 4].map((i) => <button type="button" key={i} onClick={() => update({ hydration: i + 1 })} className={`h-8 w-5 rounded-md ${i < state.hydration ? 'bg-primary' : 'bg-secondary'}`} data-testid={`button-nutrition-water-${i + 1}`} />)}</div></div></div>;
+  const selectGoal = (nutritionGoal: NutritionGoal) => update({ nutritionGoal, mealOffsets: [0, 0, 0, 0] });
+  const nutritionSummary = state.nutritionGoal === 'gain'
+    ? 'These ideas include energy-dense foods alongside protein to make adding nourishing food easier.'
+    : state.nutritionGoal === 'lose'
+      ? 'These ideas emphasize protein, produce, and satisfying meals. No foods are off-limits.'
+      : 'These balanced ideas are a flexible starting point for everyday meals.';
+
+  return <div className="page-enter">
+    <Topbar eyebrow="Eat like it matters" title="Nutrition" action={<Link href="/" className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground sm:flex" data-testid="link-nutrition-home"><House size={14} /> Today</Link>} />
+    <section className="card mb-4 p-5 sm:p-6" data-testid="section-nutrition-goal">
+      <fieldset>
+        <legend className="font-display text-lg font-bold">What’s your current eating goal?</legend>
+        <p className="mt-1 text-xs text-muted-foreground">This choice only changes meal ideas; it doesn’t change your training goal.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3" role="group" aria-label="Choose your eating goal">
+          {goalsForEating.map((goal) => <button key={goal.id} type="button" aria-pressed={state.nutritionGoal === goal.id} onClick={() => selectGoal(goal.id)} className={`rounded-xl border p-3 text-left transition ${state.nutritionGoal === goal.id ? 'selection-ring border-primary bg-primary/[.08]' : 'border-border bg-secondary/30 hover:bg-secondary/60'}`} data-testid={`button-nutrition-goal-${goal.id}`}>
+            <span className={`block text-sm font-semibold ${state.nutritionGoal === goal.id ? 'text-primary' : 'text-foreground'}`}>{goal.label}</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{goal.detail}</span>
+          </button>)}
+        </div>
+      </fieldset>
+    </section>
+    <div className="rounded-2xl border border-accent/25 bg-accent/[.08] p-5 sm:p-7">
+      <div className="flex items-start gap-4"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground"><HeartPulse size={21} /></div><div><Pill color="orange">Training goal · {goals.find((item) => item.id === state.goal)?.label}</Pill><h2 className="font-display mt-3 text-2xl font-bold tracking-tight">Feed the adaptation.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{nutritionSummary}</p></div></div>
+      <div className="mt-6 grid gap-2 sm:grid-cols-3"><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">PROTEIN</p><p className="mt-2 text-sm font-bold">Include it regularly</p></div><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">WATER</p><p className="mt-2 text-sm font-bold">{state.hydration}/5 reminders checked</p></div><div className="rounded-xl bg-background/30 p-3"><p className="font-mono text-[10px] text-muted-foreground">TIMING</p><p className="mt-2 text-sm font-bold">Train fed, not full</p></div></div>
+    </div>
+    <div className="mt-5 grid gap-3 sm:grid-cols-2">{mealSets.map((meal, index) => <MealCard key={meal.title} meal={meal.title} idea={meal.meals[(state.mealOffsets[index] ?? 0) % meal.meals.length]} index={index} onSwap={() => rotate(index)} />)}</div>
+    <p className="mt-3 text-xs leading-5 text-muted-foreground">Meal ideas are general suggestions, not calorie prescriptions or medical advice. Adjust portions to your needs; consult a qualified professional for personalized guidance.</p>
+    <div className="mt-4 card flex items-center gap-4 p-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary"><Waves size={19} /></div><div className="flex-1"><p className="text-sm font-bold">Water, before the reminder.</p><p className="mt-1 text-xs text-muted-foreground">Tap a glass when you finish it. Five is a solid day.</p></div><div className="flex gap-1">{[0, 1, 2, 3, 4].map((i) => <button type="button" key={i} onClick={() => update({ hydration: i + 1 })} className={`h-8 w-5 rounded-md ${i < state.hydration ? 'bg-primary' : 'bg-secondary'}`} data-testid={`button-nutrition-water-${i + 1}`} aria-label={`Mark ${i + 1} of 5 water reminders checked`} />)}</div></div>
+  </div>;
 }
 
 function MealCard({ meal, idea, index, onSwap }: { meal: string; idea: string; index: number; onSwap: () => void }) {
