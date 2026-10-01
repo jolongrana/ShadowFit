@@ -1,6 +1,8 @@
 export type Goal = 'strength' | 'muscle' | 'endurance' | 'skill' | 'general';
 export type View = 'today' | 'workout' | 'progress' | 'nutrition' | 'looks' | 'settings';
 export type FaceShape = 'oval' | 'round' | 'square' | 'heart' | 'oblong' | 'diamond';
+export type OutfitStyle = 'casual' | 'sporty' | 'smart-casual' | 'streetwear';
+export type OutfitAdvice = 'men' | 'women';
 
 export type Exercise = {
   id: string;

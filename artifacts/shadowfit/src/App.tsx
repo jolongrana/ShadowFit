@@ -12,7 +12,7 @@ import {
   Trophy, UserRound, Volume2, Waves, X,
 } from 'lucide-react';
 import NotFound from '@/pages/not-found';
-import { faceShapes, goals, lookRecommendations, mealSets, workouts, type Exercise, type FaceShape, type Goal, type View, type Workout } from './data/shadowfit';
+import { faceShapes, goals, lookRecommendations, mealSets, workouts, type Exercise, type FaceShape, type Goal, type OutfitAdvice, type OutfitStyle, type View, type Workout } from './data/shadowfit';
 
 const queryClient = new QueryClient();
 const STORE_KEY = 'shadowfit-local-v1';
@@ -49,6 +49,11 @@ type AppState = {
   weatherRecommendation: string;
   lookPhoto: string;
   faceShape: FaceShape | null;
+  dailySteps: Record<string, number>;
+  lookHeight: string;
+  lookShoulderWidth: string;
+  outfitStyle: OutfitStyle;
+  outfitAdvice: OutfitAdvice;
 };
 
 const defaultState: AppState = {
@@ -57,6 +62,7 @@ const defaultState: AppState = {
   theme: 'dark', notifications: 'Not requested', hydration: 3, mealOffsets: [0, 0, 0, 0],
   weatherLabel: 'Indoor is always on', weatherTemp: '—', weatherCondition: 'Manual fallback', weatherRecommendation: 'Indoor workout recommended.',
   lookPhoto: '', faceShape: null,
+  dailySteps: {}, lookHeight: '', lookShoulderWidth: '', outfitStyle: 'casual', outfitAdvice: 'men',
 };
 
 function readState(): AppState {
@@ -71,6 +77,11 @@ function readState(): AppState {
       mealReminder: saved.mealReminder ?? defaultState.mealReminder,
       weatherCondition: saved.weatherCondition ?? defaultState.weatherCondition,
       weatherRecommendation: saved.weatherRecommendation ?? defaultState.weatherRecommendation,
+      dailySteps: saved.dailySteps ?? defaultState.dailySteps,
+      lookHeight: saved.lookHeight ?? defaultState.lookHeight,
+      lookShoulderWidth: saved.lookShoulderWidth ?? defaultState.lookShoulderWidth,
+      outfitStyle: saved.outfitStyle ?? defaultState.outfitStyle,
+      outfitAdvice: saved.outfitAdvice ?? defaultState.outfitAdvice,
     };
   } catch { return defaultState; }
 }
@@ -85,6 +96,72 @@ function currentStreak(history: HistoryEntry[]) {
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function lastSevenDays(now = new Date()) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(now);
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    return {
+      key: localDateKey(date),
+      label: new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(date),
+      date,
+    };
+  });
+}
+
+function currentSeason(date = new Date()) {
+  const month = date.getMonth();
+  if (month >= 2 && month <= 4) return 'Spring';
+  if (month >= 5 && month <= 7) return 'Summer';
+  if (month >= 8 && month <= 10) return 'Fall';
+  return 'Winter';
+}
+
+function outfitIdeas(style: OutfitStyle, advice: OutfitAdvice, season: string, heightCm: number, shoulderCm: number) {
+  const looks: Record<OutfitAdvice, Record<OutfitStyle, string>> = {
+    men: {
+      casual: 'Try a textured tee or knit polo with straight-leg jeans or chinos and clean sneakers.',
+      sporty: 'Try a performance tee with tapered joggers or training shorts and a lightweight zip layer.',
+      'smart-casual': 'Try an Oxford shirt or fine-gauge knit with tailored trousers and simple leather sneakers.',
+      streetwear: 'Try a boxy graphic tee with relaxed cargos, a clean overshirt, and low-profile sneakers.',
+    },
+    women: {
+      casual: 'Try a fitted tee or relaxed knit with straight-leg denim or easy trousers and clean sneakers.',
+      sporty: 'Try a supportive athletic top with leggings or training shorts and a lightweight zip layer.',
+      'smart-casual': 'Try a soft blouse or fine-gauge knit with tailored trousers or a midi skirt and simple flats.',
+      streetwear: 'Try a boxy tee with relaxed cargos or wide-leg denim, a clean overshirt, and low-profile sneakers.',
+    },
+  };
+  const seasonalLayer: Record<string, string> = {
+    Spring: 'Add a breathable overshirt or light trench for changing temperatures.',
+    Summer: 'Choose airy fabrics such as cotton or linen, and keep the extra layer light.',
+    Fall: 'Add a mid-weight overshirt, cardigan, or light jacket for cooler mornings.',
+    Winter: 'Layer with a warm coat and a knit or fleece mid-layer; keep the base comfortable indoors.',
+  };
+  const heightNote = heightCm < 165
+    ? 'For your height, a slightly higher rise and shorter jacket can create a clean, uninterrupted line.'
+    : heightCm > 185
+      ? 'For your height, try balanced contrast or a longer outer layer to give the outfit an intentional proportion.'
+      : 'A balanced silhouette works well: pair one relaxed piece with one more structured piece.';
+  const shoulderNote = shoulderCm < 40
+    ? 'For shoulder fit, look for clean shoulder seams and light structure in jackets or overshirts.'
+    : shoulderCm > 47
+      ? 'For shoulder fit, choose shoulder seams that sit naturally and softer layers that move without pulling.'
+      : 'For shoulder fit, use the shoulder seam as your guide; a comfortable, natural drape is the goal.';
+  return {
+    outfit: looks[advice][style],
+    season: seasonalLayer[season],
+    proportions: `${heightNote} ${shoulderNote}`,
+  };
 }
 
 type ShadowScore = {
@@ -414,22 +491,123 @@ function WorkoutPage() {
   </div>;
 }
 
+function WeeklyAreaChart({ title, unit, values, testId }: { title: string; unit: string; values: Array<{ label: string; value: number }>; testId: string }) {
+  const width = 700;
+  const top = 18;
+  const bottom = 158;
+  const max = Math.max(1, ...values.map((item) => item.value));
+  const points = values.map((item, index) => ({
+    ...item,
+    x: 18 + index * ((width - 36) / Math.max(1, values.length - 1)),
+    y: bottom - (item.value / max) * (bottom - top),
+  }));
+  const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+  const areaPath = `${linePath} L ${points.at(-1)?.x ?? width - 18} ${bottom} L ${points[0]?.x ?? 18} ${bottom} Z`;
+  const gradientId = `area-${testId}`;
+
+  return <section className="card p-5 sm:p-7" data-testid={testId}>
+    <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Last seven days</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">{title}</h2><p className="mt-1 text-xs text-muted-foreground">Each point is one calendar day · {unit}</p></div>
+    <div className="mt-5">
+      <svg viewBox={`0 0 ${width} 180`} preserveAspectRatio="none" className="h-44 w-full overflow-visible" role="img" aria-label={`${title} for the last seven days`}>
+        <defs><linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity=".34" /><stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity=".015" /></linearGradient></defs>
+        {[top, top + (bottom - top) / 3, top + (bottom - top) * 2 / 3, bottom].map((y) => <line key={y} x1="0" x2={width} y1={y} y2={y} stroke="hsl(var(--border))" strokeDasharray="4 6" />)}
+        <path d={areaPath} fill={`url(#${gradientId})`} />
+        <path d={linePath} fill="none" stroke="hsl(var(--primary))" strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((point) => <circle key={point.label} cx={point.x} cy={point.y} r="4" fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth="2" vectorEffect="non-scaling-stroke"><title>{`${point.label}: ${point.value} ${unit}`}</title></circle>)}
+      </svg>
+      <div className="mt-1 flex justify-between gap-1">{points.map((point, index) => <div key={`${point.label}-${index}`} className="flex min-w-0 flex-1 flex-col items-center"><span className="font-mono text-[9px] text-muted-foreground">{point.label}</span><span className="mt-1 max-w-full truncate font-mono text-[9px] text-foreground">{point.value.toLocaleString()}</span></div>)}</div>
+    </div>
+    {!values.some((item) => item.value > 0) && <p className="mt-3 text-center text-xs text-muted-foreground">No {unit} logged in the last seven days yet.</p>}
+  </section>;
+}
+
 function Progress() {
-  const { state } = useApp();
+  const { state, update } = useApp();
+  const todayKey = localDateKey(new Date());
+  const todaySteps = state.dailySteps[todayKey] ?? 0;
+  const days = lastSevenDays();
+  const historyByDay = state.history.reduce<Record<string, { minutes: number; sessions: number }>>((totals, item) => {
+    const date = new Date(item.date);
+    if (!Number.isNaN(date.getTime())) {
+      const key = localDateKey(date);
+      totals[key] ??= { minutes: 0, sessions: 0 };
+      totals[key].minutes += item.minutes;
+      totals[key].sessions += 1;
+    }
+    return totals;
+  }, {});
+  const weekActivity = days.map((day) => ({
+    label: day.label,
+    minutes: historyByDay[day.key]?.minutes ?? 0,
+    sessions: historyByDay[day.key]?.sessions ?? 0,
+    steps: state.dailySteps[day.key] ?? 0,
+  }));
+  const weeklySessions = weekActivity.reduce((sum, day) => sum + day.sessions, 0);
   const totalMinutes = state.history.reduce((sum, item) => sum + item.minutes, 0);
   const totalSets = state.history.reduce((sum, item) => sum + item.sets, 0);
-  const weekValues = [0, 0, 0, 0, 0, 0, 0]; state.history.slice(0, 20).forEach((item) => { const day = (new Date(item.date).getDay() + 6) % 7; weekValues[day] += item.minutes; });
-  const max = Math.max(30, ...weekValues);
   const exerciseCounts = state.history.reduce<Record<string, number>>((acc, item) => { acc[item.name] = (acc[item.name] ?? 0) + item.sets; return acc; }, {});
   const prs = Object.entries(exerciseCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const streak = currentStreak(state.history);
-  return <div className="page-enter"><Topbar eyebrow="Proof of work" title="Progress" action={<button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-border text-muted-foreground" data-testid="button-progress-filter"><CalendarDays size={16} /></button>} /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Sessions" value={String(state.history.length)} icon={<Dumbbell size={17} />} /><Metric label="Minutes" value={String(totalMinutes)} icon={<Clock3 size={17} />} /><Metric label="Sets moved" value={String(totalSets)} icon={<Gauge size={17} />} /><Metric label="Current streak" value={`${streak}d`} icon={<Flame size={17} />} /></div><div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><section className="card p-5 sm:p-7"><div className="flex items-start justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Weekly activity</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Keep the line moving.</h2></div><Pill color="volt">{state.history.length ? 'In motion' : 'Start today'}</Pill></div><div className="mt-8 flex h-44 items-end gap-2 border-b border-border pb-2">{weekValues.map((value, index) => <div key={index} className="flex flex-1 flex-col items-center gap-2"><div className="flex h-full w-full items-end"><div className={`chart-bar w-full ${value ? '' : 'opacity-20'}`} style={{ height: `${Math.max(8, (value / max) * 100)}%` }} /></div><span className="font-mono text-[10px] text-muted-foreground">{['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]}</span></div>)}</div></section><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Completion</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">A little better.</h2></div><Target size={21} className="text-primary" /></div><div className="mt-8 flex items-center gap-5"><div className="relative grid h-28 w-28 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(hsl(var(--primary)) ${Math.min(100, state.history.length * 17)}%, hsl(var(--secondary)) 0)` }}><div className="grid h-20 w-20 place-items-center rounded-full bg-card"><span className="font-display text-2xl font-bold">{Math.min(100, state.history.length * 17)}%</span></div></div><p className="text-sm leading-6 text-muted-foreground">Your weekly target is six sessions. <span className="font-semibold text-foreground">{Math.max(0, 6 - state.history.length)} to go</span> this week.</p></div></section></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Personal records</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Your quiet wins.</h2></div><Trophy size={21} className="text-accent" /></div>{prs.length ? <div className="mt-6 space-y-3">{prs.map(([name, sets], index) => <div key={name} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><span className="flex-1 text-sm font-semibold">{name}</span><span className="font-mono text-xs text-muted-foreground">{sets} sets</span></div>)}</div> : <EmptyState icon={<Trophy size={19} />} title="Your first PR is waiting." copy="Finish a session to start building your record." />}</section><section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Exercise history</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Recent sessions.</h2></div><Activity size={21} className="text-primary" /></div>{state.history.length ? <div className="mt-6 space-y-3">{state.history.slice(0, 4).map((item) => <div key={item.id} className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary"><Check size={16} /></div><div className="flex-1"><p className="text-sm font-semibold">{item.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {item.minutes} min</p></div><span className="font-mono text-xs text-muted-foreground">{item.sets} sets</span></div>)}</div> : <EmptyState icon={<Activity size={19} />} title="Nothing logged yet." copy="Your history will show up after your first finished workout." />}</section></div></div>;
+  const updateTodaySteps = (value: string) => {
+    const steps = Math.min(200000, Math.max(0, Math.floor(Number(value) || 0)));
+    update({ dailySteps: { ...state.dailySteps, [todayKey]: steps } });
+  };
+  const stepProgress = Math.min(100, (todaySteps / 10000) * 100);
+
+  return <div className="page-enter">
+    <Topbar eyebrow="Proof of work" title="Progress" action={<div className="grid h-9 w-9 place-items-center rounded-full border border-border text-muted-foreground"><CalendarDays size={16} /></div>} />
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Metric label="Sessions" value={String(state.history.length)} icon={<Dumbbell size={17} />} />
+      <Metric label="Minutes" value={String(totalMinutes)} icon={<Clock3 size={17} />} />
+      <Metric label="Sets moved" value={String(totalSets)} icon={<Gauge size={17} />} />
+      <Metric label="Current streak" value={`${streak}d`} icon={<Flame size={17} />} />
+    </div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+      <div>
+        <WeeklyAreaChart title="Workout minutes" unit="minutes" values={weekActivity.map((day) => ({ label: day.label, value: day.minutes }))} testId="chart-weekly-minutes" />
+        <p className="mt-2 px-1 text-xs text-muted-foreground">{weeklySessions} workout {weeklySessions === 1 ? 'session' : 'sessions'} logged in this seven-day period.</p>
+      </div>
+      <section className="card p-5 sm:p-7">
+        <div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Weekly target</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Keep showing up.</h2></div><Target size={21} className="text-primary" /></div>
+        <div className="mt-8 flex items-center gap-5"><div className="relative grid h-28 w-28 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(hsl(var(--primary)) ${Math.min(100, (weeklySessions / 6) * 100)}%, hsl(var(--secondary)) 0)` }}><div className="grid h-20 w-20 place-items-center rounded-full bg-card"><span className="font-display text-2xl font-bold">{Math.min(100, Math.round((weeklySessions / 6) * 100))}%</span></div></div><p className="text-sm leading-6 text-muted-foreground">Your target is six sessions in seven days. <span className="font-semibold text-foreground">{Math.max(0, 6 - weeklySessions)} to go</span> this week.</p></div>
+      </section>
+    </div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-[.8fr_1.2fr]">
+    <section className="card p-5 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Daily movement</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Track your steps.</h2><p className="mt-1 text-sm text-muted-foreground">Log today’s total; it stays saved on this device.</p></div>
+        <label className="block"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.12em] text-muted-foreground">Today’s steps</span><input type="number" min={0} max={200000} step={100} value={todaySteps} onChange={(event) => updateTodaySteps(event.target.value)} className="w-36 rounded-xl border border-border bg-secondary/50 px-3 py-2.5 text-right font-mono text-lg outline-none focus:border-primary" aria-label="Today's step count" data-testid="input-daily-steps" /></label>
+      </div>
+      <div className="mt-5 flex items-center justify-between gap-3"><span className="font-mono text-xs text-muted-foreground">{todaySteps.toLocaleString()} / 10,000 steps</span><button type="button" onClick={() => updateTodaySteps(String(todaySteps + 1000))} className="rounded-lg bg-secondary px-3 py-2 text-xs font-semibold hover:bg-secondary/80" data-testid="button-add-steps">+1,000 steps</button></div>
+      <ProgressBar value={stepProgress} className="mt-3" />
+    </section>
+    <WeeklyAreaChart title="Steps by day" unit="steps" values={weekActivity.map((day) => ({ label: day.label, value: day.steps }))} testId="chart-weekly-steps" />
+    </div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Personal records</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Your quiet wins.</h2></div><Trophy size={21} className="text-accent" /></div>{prs.length ? <div className="mt-6 space-y-3">{prs.map(([name, sets], index) => <div key={name} className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-3"><span className="font-mono text-xs text-primary">0{index + 1}</span><span className="flex-1 text-sm font-semibold">{name}</span><span className="font-mono text-xs text-muted-foreground">{sets} sets</span></div>)}</div> : <EmptyState icon={<Trophy size={19} />} title="Your first PR is waiting." copy="Finish a session to start building your record." />}</section>
+      <section className="card p-5 sm:p-7"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-muted-foreground">Exercise history</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Recent sessions.</h2></div><Activity size={21} className="text-primary" /></div>{state.history.length ? <div className="mt-6 space-y-3">{state.history.slice(0, 4).map((item) => <div key={item.id} className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary"><Check size={16} /></div><div className="flex-1"><p className="text-sm font-semibold">{item.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {item.minutes} min</p></div><span className="font-mono text-xs text-muted-foreground">{item.sets} sets</span></div>)}</div> : <EmptyState icon={<Activity size={19} />} title="Nothing logged yet." copy="Your history will show up after your first finished workout." />}</section>
+    </div>
+  </div>;
 }
 
 function Looks() {
   const { state, update } = useApp();
   const recommendation = state.faceShape ? lookRecommendations[state.faceShape] : null;
   const shapeLabel = faceShapes.find((shape) => shape.id === state.faceShape)?.label;
+  const season = currentSeason();
+  const heightCm = Number(state.lookHeight) || 0;
+  const shoulderCm = Number(state.lookShoulderWidth) || 0;
+  const heightDisplay = state.lookHeight ? (state.units === 'imperial' ? (heightCm / 2.54).toFixed(1) : state.lookHeight) : '';
+  const shoulderDisplay = state.lookShoulderWidth ? (state.units === 'imperial' ? (shoulderCm / 2.54).toFixed(1) : state.lookShoulderWidth) : '';
+  const outfit = heightCm >= 90 && heightCm <= 240 && shoulderCm >= 25 && shoulderCm <= 70
+    ? outfitIdeas(state.outfitStyle, state.outfitAdvice, season, heightCm, shoulderCm)
+    : null;
+  const outfitStyles: Array<{ id: OutfitStyle; label: string }> = [
+    { id: 'casual', label: 'Casual' },
+    { id: 'sporty', label: 'Sporty' },
+    { id: 'smart-casual', label: 'Smart casual' },
+    { id: 'streetwear', label: 'Streetwear' },
+  ];
 
   const handleUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -474,6 +652,34 @@ function Looks() {
         </div>}
       </section>
     </div>
+    <section className="card mt-4 p-5 sm:p-7" data-testid="section-outfit-ideas">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-primary">Wear the season</p><h2 className="font-display mt-2 text-2xl font-bold tracking-tight">Outfit ideas for {season.toLowerCase()}.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Suggestions use your height, shoulder width, and chosen style. Season follows the calendar on your device.</p></div>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3">
+          <span className={`text-xs font-semibold ${state.outfitAdvice === 'men' ? 'text-foreground' : 'text-muted-foreground'}`}>Men</span>
+          <button type="button" role="switch" aria-checked={state.outfitAdvice === 'women'} aria-label="Switch outfit advice between men and women" onClick={() => update({ outfitAdvice: state.outfitAdvice === 'men' ? 'women' : 'men' })} className={`relative h-6 w-11 rounded-full transition-colors ${state.outfitAdvice === 'women' ? 'bg-primary' : 'bg-muted'}`} data-testid="switch-outfit-advice"><span className={`absolute top-1 h-4 w-4 rounded-full bg-background transition-transform ${state.outfitAdvice === 'women' ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          <span className={`text-xs font-semibold ${state.outfitAdvice === 'women' ? 'text-foreground' : 'text-muted-foreground'}`}>Women</span>
+        </div>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">Advice for: <span className="font-semibold text-foreground">{state.outfitAdvice === 'men' ? 'men' : 'women'}</span>. Switch again any time to see the other set.</p>
+      <div className="mt-6 grid gap-4 md:grid-cols-[.85fr_1.15fr]">
+        <div className="space-y-5">
+          <fieldset><legend className="mb-2 text-xs font-semibold">Choose your style</legend><div className="flex flex-wrap gap-2">{outfitStyles.map((style) => <button type="button" key={style.id} onClick={() => update({ outfitStyle: style.id })} aria-pressed={state.outfitStyle === style.id} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${state.outfitStyle === style.id ? 'border-primary bg-primary/15 text-primary' : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/70'}`} data-testid={`button-outfit-style-${style.id}`}>{style.label}</button>)}</div></fieldset>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold">Height ({state.units === 'imperial' ? 'in' : 'cm'})</span><input type="number" min={state.units === 'imperial' ? 35 : 90} max={state.units === 'imperial' ? 95 : 240} step={state.units === 'imperial' ? 0.5 : 1} value={heightDisplay} onChange={(event) => update({ lookHeight: event.target.value ? String(state.units === 'imperial' ? Number(event.target.value) * 2.54 : Number(event.target.value)) : '' })} placeholder={state.units === 'imperial' ? 'e.g. 68' : 'e.g. 173'} className="w-full rounded-xl border border-border bg-secondary/50 px-3 py-2.5 text-sm outline-none focus:border-primary" data-testid="input-outfit-height" /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold">Shoulder width ({state.units === 'imperial' ? 'in' : 'cm'})</span><input type="number" min={state.units === 'imperial' ? 10 : 25} max={state.units === 'imperial' ? 28 : 70} step={state.units === 'imperial' ? 0.1 : 0.5} value={shoulderDisplay} onChange={(event) => update({ lookShoulderWidth: event.target.value ? String(state.units === 'imperial' ? Number(event.target.value) * 2.54 : Number(event.target.value)) : '' })} placeholder={state.units === 'imperial' ? 'e.g. 17' : 'e.g. 43'} className="w-full rounded-xl border border-border bg-secondary/50 px-3 py-2.5 text-sm outline-none focus:border-primary" data-testid="input-outfit-shoulder-width" /></label>
+          </div>
+          <p className="text-[11px] leading-5 text-muted-foreground">Measure shoulder width across your back from shoulder point to shoulder point. These are optional fit cues, saved only in this browser.</p>
+        </div>
+        <div className="rounded-2xl bg-secondary/45 p-4 sm:p-5">
+          {outfit ? <div className="space-y-4">
+            <div><p className="font-mono text-[10px] uppercase tracking-[.16em] text-primary">{season} · {outfitStyles.find((style) => style.id === state.outfitStyle)?.label} · advice for {state.outfitAdvice}</p><h3 className="font-display mt-2 text-xl font-bold">A useful starting outfit.</h3><p className="mt-3 text-sm leading-6">{outfit.outfit}</p></div>
+            <div className="border-t border-border pt-3"><p className="text-xs font-semibold">Seasonal layer</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{outfit.season}</p></div>
+            <div className="border-t border-border pt-3"><p className="text-xs font-semibold">Fit notes</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{outfit.proportions}</p></div>
+          </div> : <div className="flex min-h-40 flex-col justify-center"><p className="text-sm font-semibold">Add two measurements for a tailored suggestion.</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Enter your height and shoulder width. You can update either whenever you want; the advice changes with the selected style, season, and men’s/women’s switch.</p></div>}
+        </div>
+      </div>
+    </section>
   </div>;
 }
 
