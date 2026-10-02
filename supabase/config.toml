@@ -1,0 +1,2 @@
+[functions.video-feed]
+verify_jwt = false
