@@ -1,2 +1,2 @@
-[functions.video-feed]
-verify_jwt = false
+# Edge functions are deployed from supabase/functions/
+# No functions currently configured.
